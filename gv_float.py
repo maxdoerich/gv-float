@@ -1,3 +1,4 @@
+import functools
 import json
 import math
 import random
@@ -126,6 +127,7 @@ CHARACTERS = (
     "HEK cell",
     "Yeast",
     "Anabaena",
+    "Serratia",
     "Halobacterium",
     "Salmonella",
     "Purified GVs",
@@ -134,18 +136,58 @@ CHARACTERS = (
     FINAL_SKIN,
 )
 # Collision box per skin: half width and half height around the centre.
+# Measured from the drawn sprites and pulled in a pixel or two on round shapes,
+# so thin flagella and rounded corners never cost a life.
 HITBOXES = {
-    "E. coli": (19, 13),
-    "HEK cell": (18, 18),
+    "E. coli": (19, 12),
+    "HEK cell": (17, 17),
     "Yeast": (19, 17),
-    "Anabaena": (23, 11),
-    "Halobacterium": (19, 11),
+    "Anabaena": (24, 10),
+    "Serratia": (19, 12),
+    "Halobacterium": (27, 11),
     "Salmonella": (18, 12),
-    "Purified GVs": (14, 12),
+    "Purified GVs": (13, 13),
     "BioBrick": (20, 14),
-    "Zeppelin": (20, 11),
-    FINAL_SKIN: (19, 14),
+    "Zeppelin": (21, 12),
+    FINAL_SKIN: (19, 19),
 }
+
+# Difficulty presets, picked in the start menu.
+#   levels:    the level system (the current speeds up from score 20 on)
+#   transducer: multiplier on how much GV a collapse field destroys
+#   hazards:   multiplier on how often macrophages and ciliates swim in
+#   powerups:  multiplier on how often SpyCatchers and GvpC show up
+DIFFICULTIES = (
+    {"name": "Relaxed", "levels": False, "transducer": 0.5, "hazards": 0.5, "powerups": 2.0,
+     "color": (120, 240, 120)},
+    {"name": "Easy", "levels": True, "transducer": 0.75, "hazards": 0.75, "powerups": 1.5,
+     "color": (150, 225, 255)},
+    {"name": "Normal", "levels": True, "transducer": 1.0, "hazards": 1.0, "powerups": 1.0,
+     "color": (250, 210, 65)},
+    {"name": "Hard", "levels": True, "transducer": 1.25, "hazards": 1.4, "powerups": 0.7,
+     "color": (235, 80, 80)},
+)
+DEFAULT_DIFFICULTY = "Normal"
+KILL_COINS = 5
+
+
+def find_difficulty(name):
+    return next((d for d in DIFFICULTIES if d["name"] == name), None) or next(
+        d for d in DIFFICULTIES if d["name"] == DEFAULT_DIFFICULTY
+    )
+
+
+def difficulty_lines(difficulty):
+    """Short bullet list for the menu card."""
+    def percent(value):
+        return f"{value * 100:.0f}%"
+    return [
+        "Level system: " + ("on" if difficulty["levels"] else "off"),
+        f"Transducer collapse: {percent(difficulty['transducer'])}",
+        f"Incoming cells: {percent(difficulty['hazards'])}",
+        f"Upgrades & GvpC: {percent(difficulty['powerups'])}",
+    ]
+
 
 # Skins are bought with coins, except where a promo code or a special
 # unlock condition is the only way in.
@@ -154,6 +196,7 @@ SKIN_PRICES = {
     "HEK cell": 20,
     "Yeast": 30,
     "Anabaena": 35,
+    "Serratia": 45,
     "Halobacterium": 55,
     "Salmonella": 65,
     "Purified GVs": 80,
@@ -165,9 +208,14 @@ SKIN_PRICES = {
 # Every skin carries one small trait, so buying one changes how a run feels.
 SKIN_PERKS = {
     "E. coli": {"label": "Fast producer: +15% GV production", "short": "+15% GV production", "production": 1.15},
-    "HEK cell": {"label": "Reserve: starts the run at 65% GVs", "short": "Starts with 65% GVs", "start_gv": 65.0},
+    "HEK cell": {
+        "label": "Sturdy: starts every run with a GvpC shell",
+        "short": "Starts with a GvpC shell",
+        "start_shell": 1,
+    },
     "Yeast": {"label": "Budding: +10% coins", "short": "+10% coins", "coins": 1.10},
     "Anabaena": {"label": "Gas store: GVs collapse 15% slower", "short": "GVs collapse 15% slower", "collapse": 0.85},
+    "Serratia": {"label": "Prodigious producer: +30% GV production", "short": "+30% GV production", "production": 1.30},
     "Halobacterium": {"label": "Halotolerant: -25% transducer collapse", "short": "-25% transducer collapse", "transducer": 0.75},
     "Salmonella": {"label": "Motile: +15% top speed", "short": "+15% top speed", "speed": 1.15},
     "Purified GVs": {"label": "Bare vesicles: +10% buoyancy", "short": "+10% buoyancy", "buoyancy": 1.10},
@@ -269,11 +317,10 @@ TUTORIAL_CARDS = {
 PROMO_CODES = {
     "zeppelin": ("skin", "Zeppelin"),
     "money": ("coins", 20),
-    "money50": ("coins", 50),
     "heidelberg": ("special_prize", 1),
 }
 # These never get used up; everything else in PROMO_CODES is one-shot.
-REPEATABLE_CODES = {"money50"}
+REPEATABLE_CODES = {}
 MAX_CODE_LENGTH = 14
 
 # iGEM special prizes: a rare, hard-to-reach pickup tucked against a gap's
@@ -362,6 +409,7 @@ ANABAENA_COLOR = (95, 195, 165)
 YEAST_COLOR = (235, 200, 130)
 YEAST_VACUOLE = (170, 130, 75)
 SALMONELLA_COLOR = (130, 150, 235)
+SERRATIA_COLOR = (205, 45, 75)
 HALO_COLOR = (225, 85, 120)
 BIOBRICK_COLOR = (245, 135, 55)
 WHITE = (255, 255, 255)
@@ -544,6 +592,7 @@ def load_progress():
         "tutorial_stage": 0,
         "special_prizes": 0,
         "biobrick_tier": 0,
+        "difficulty": DEFAULT_DIFFICULTY,
     }
     progress.update({key: 0 for key in UPGRADE_KEYS})
     try:
@@ -559,6 +608,7 @@ def load_progress():
         )
         progress["special_prizes"] = max(0, int(data.get("special_prizes", 0)))
         progress["biobrick_tier"] = clamp(int(data.get("biobrick_tier", 0)), 0, 3)
+        progress["difficulty"] = find_difficulty(data.get("difficulty"))["name"]
         progress["missions"] = [
             mission
             for mission in data.get("missions", [])
@@ -753,8 +803,8 @@ def locked_skin_badge(character, progress):
     return "promo only"
 
 
-def difficulty_for_score(score):
-    if score < LEVEL_START_SCORE:
+def difficulty_for_score(score, difficulty=None):
+    if score < LEVEL_START_SCORE or (difficulty and not difficulty["levels"]):
         return 1, BASE_SCROLL_SPEED, BASE_OBSTACLE_GAP, BASE_OBSTACLE_SPACING
 
     steps = (score - LEVEL_START_SCORE) // DIFFICULTY_STEP_SCORE + 1
@@ -779,6 +829,71 @@ GV_POSITIONS = [
     (0, 0), (11, 3), (-6, 9), (6, 9),
 ]
 SPRITE_SIZE = (84, 64)
+
+
+@functools.lru_cache(maxsize=None)
+def gauge_font(size):
+    return pygame.font.SysFont(FONT_NAMES, size, bold=True)
+
+
+class ScaledCanvas:
+    """Draws the sprite at `scale` times its size, so big previews get real detail
+    instead of an upscaled 84x64 bitmap."""
+
+    def __init__(self, size, scale):
+        self.scale = scale
+        self.surface = pygame.Surface((int(size[0] * scale), int(size[1] * scale)), pygame.SRCALPHA)
+
+
+class gfx:
+    """pygame.draw that also accepts a ScaledCanvas: coordinates and widths are scaled."""
+
+    @staticmethod
+    def _target(s):
+        return (s.surface, s.scale) if isinstance(s, ScaledCanvas) else (s, 1)
+
+    @staticmethod
+    def _width(width, k):
+        return max(1, round(width * k)) if width else 0
+
+    @staticmethod
+    def _point(point, k):
+        return (point[0] * k, point[1] * k)
+
+    @staticmethod
+    def _rect(rect, k):
+        rect = pygame.Rect(rect)
+        return pygame.Rect(round(rect.x * k), round(rect.y * k), round(rect.w * k), round(rect.h * k))
+
+    @staticmethod
+    def rect(s, color, rect, width=0, border_radius=0):
+        surface, k = gfx._target(s)
+        pygame.draw.rect(surface, color, gfx._rect(rect, k), gfx._width(width, k), border_radius=round(border_radius * k))
+
+    @staticmethod
+    def circle(s, color, center, radius, width=0):
+        surface, k = gfx._target(s)
+        pygame.draw.circle(surface, color, gfx._point(center, k), max(1, round(radius * k)), gfx._width(width, k))
+
+    @staticmethod
+    def ellipse(s, color, rect, width=0):
+        surface, k = gfx._target(s)
+        pygame.draw.ellipse(surface, color, gfx._rect(rect, k), gfx._width(width, k))
+
+    @staticmethod
+    def polygon(s, color, points, width=0):
+        surface, k = gfx._target(s)
+        pygame.draw.polygon(surface, color, [gfx._point(p, k) for p in points], gfx._width(width, k))
+
+    @staticmethod
+    def line(s, color, start, end, width=1):
+        surface, k = gfx._target(s)
+        pygame.draw.line(surface, color, gfx._point(start, k), gfx._point(end, k), gfx._width(width, k) or 1)
+
+    @staticmethod
+    def lines(s, color, closed, points, width=1):
+        surface, k = gfx._target(s)
+        pygame.draw.lines(surface, color, closed, [gfx._point(p, k) for p in points], gfx._width(width, k) or 1)
 
 
 class Bacterium:
@@ -826,6 +941,7 @@ class Bacterium:
             AMPICILLIN_BASE_SHOTS + ampicillin_level * AMPICILLIN_BONUS_SHOTS_PER_LEVEL
         )
         self.ampicillin_homing = ampicillin_level >= UPGRADE_MAX_LEVEL
+        self.shell = min(MAX_SHELL_LAYERS, self.perk.get("start_shell", 0))
         if self.character == "BioBrick":
             self.biobrick_tier = progress.get("biobrick_tier", 0)
             self.perk = dict(self.perk)
@@ -1012,41 +1128,7 @@ class Bacterium:
             surface.blit(halo, halo.get_rect(center=(int(self.x), int(self.y))))
 
         sprite = pygame.Surface(SPRITE_SIZE, pygame.SRCALPHA)
-        cx, cy = SPRITE_SIZE[0] // 2, SPRITE_SIZE[1] // 2
-        visible_gvs = int(self.gv_level / 100.0 * len(GV_POSITIONS))
-
-        if self.character == "Zeppelin":
-            self.draw_zeppelin(sprite, cx, cy)
-        elif self.character == "E. coli":
-            self.draw_ecoli(sprite, cx, cy, t)
-        elif self.character == "HEK cell":
-            self.draw_hek(sprite, cx, cy, t)
-        elif self.character == "Anabaena":
-            self.draw_anabaena(sprite, cx, cy, t)
-        elif self.character == "Yeast":
-            self.draw_yeast(sprite, cx, cy, t)
-        elif self.character == "Salmonella":
-            self.draw_salmonella(sprite, cx, cy, t)
-        elif self.character == "Halobacterium":
-            self.draw_halobacterium(sprite, cx, cy, t)
-        elif self.character == "BioBrick":
-            self.draw_biobrick(sprite, cx, cy, BIOBRICK_TIER_COLORS[self.biobrick_tier])
-        elif self.character == FINAL_SKIN:
-            self.draw_igem_legacy(sprite, cx, cy, t)
-
-        if self.character == "Purified GVs":
-            self.draw_purified(sprite, cx, cy, t, visible_gvs)
-        elif self.character == "Zeppelin":
-            self.draw_zeppelin_gauge(sprite, cx, cy)
-        elif self.character == "BioBrick":
-            # A standardised chassis: it hides its gas vesicles behind the casing.
-            pass
-        else:
-            # Show the current GV level inside all cell/zeppelin characters.
-            for dx, dy in GV_POSITIONS[:visible_gvs]:
-                gv_rect = pygame.Rect(cx + dx - 2, cy + dy - 4, 5, 9)
-                pygame.draw.ellipse(sprite, GV_COLOR, gv_rect)
-                pygame.draw.ellipse(sprite, GV_OUTLINE, gv_rect, 1)
+        self.draw_sprite(sprite, SPRITE_SIZE[0] // 2, SPRITE_SIZE[1] // 2, t)
 
         if tilt:
             angle = clamp(-self.velocity_y * 3.5, -18, 18)
@@ -1056,6 +1138,45 @@ class Bacterium:
         self.draw_shell(surface, t)
         if trail:
             self.draw_module(surface, t)
+
+    def draw_sprite(self, s, cx, cy, t):
+        """Character body plus GV level onto `s` (a Surface or a ScaledCanvas)."""
+        visible_gvs = int(self.gv_level / 100.0 * len(GV_POSITIONS))
+
+        if self.character == "Zeppelin":
+            self.draw_zeppelin(s, cx, cy)
+        elif self.character == "E. coli":
+            self.draw_ecoli(s, cx, cy, t)
+        elif self.character == "HEK cell":
+            self.draw_hek(s, cx, cy, t)
+        elif self.character == "Anabaena":
+            self.draw_anabaena(s, cx, cy, t)
+        elif self.character == "Yeast":
+            self.draw_yeast(s, cx, cy, t)
+        elif self.character == "Salmonella":
+            self.draw_salmonella(s, cx, cy, t)
+        elif self.character == "Serratia":
+            self.draw_serratia(s, cx, cy, t)
+        elif self.character == "Halobacterium":
+            self.draw_halobacterium(s, cx, cy, t)
+        elif self.character == "BioBrick":
+            self.draw_biobrick(s, cx, cy, BIOBRICK_TIER_COLORS[self.biobrick_tier])
+        elif self.character == FINAL_SKIN:
+            self.draw_igem_legacy(s, cx, cy, t)
+
+        if self.character == "Purified GVs":
+            self.draw_purified(s, cx, cy, t, visible_gvs)
+        elif self.character == "Zeppelin":
+            self.draw_zeppelin_gauge(s, cx, cy)
+        elif self.character == "BioBrick":
+            # A standardised chassis: it hides its gas vesicles behind the casing.
+            pass
+        else:
+            # Show the current GV level inside all cell/zeppelin characters.
+            for dx, dy in GV_POSITIONS[:visible_gvs]:
+                gv_rect = pygame.Rect(cx + dx - 2, cy + dy - 4, 5, 9)
+                gfx.ellipse(s, GV_COLOR, gv_rect)
+                gfx.ellipse(s, GV_OUTLINE, gv_rect, 1)
 
     def draw_module(self, surface, t):
         if not self.module:
@@ -1148,31 +1269,38 @@ class Bacterium:
                 (cx - 24, cy + sign * 13),
                 (cx - 20, cy + sign * 2),
             ]
-            pygame.draw.polygon(s, fin, points)
-            pygame.draw.polygon(s, BACTERIUM_OUTLINE, points, 1)
+            gfx.polygon(s, fin, points)
+            gfx.polygon(s, BACTERIUM_OUTLINE, points, 1)
 
         gondola = pygame.Rect(cx - 7, cy + 9, 14, 6)
-        pygame.draw.rect(s, darken(base, 0.55), gondola, border_radius=3)
-        pygame.draw.rect(s, (160, 220, 240), (cx - 4, cy + 11, 3, 2))
-        pygame.draw.rect(s, (160, 220, 240), (cx + 1, cy + 11, 3, 2))
+        gfx.rect(s, darken(base, 0.55), gondola, border_radius=3)
+        gfx.rect(s, (160, 220, 240), (cx - 4, cy + 11, 3, 2))
+        gfx.rect(s, (160, 220, 240), (cx + 1, cy + 11, 3, 2))
 
         body = pygame.Rect(cx - 20, cy - 11, 40, 22)
-        pygame.draw.ellipse(s, darken(base, 0.22), body)
-        pygame.draw.ellipse(s, base, (cx - 19, cy - 11, 38, 17))
-        pygame.draw.ellipse(s, lighten(base, 0.5), (cx - 12, cy - 9, 20, 5))
-        pygame.draw.ellipse(s, darken(base, 0.18), (cx - 8, cy - 11, 16, 22), 1)
-        pygame.draw.ellipse(s, BACTERIUM_OUTLINE, body, 2)
+        gfx.ellipse(s, darken(base, 0.22), body)
+        gfx.ellipse(s, base, (cx - 19, cy - 11, 38, 17))
+        gfx.ellipse(s, lighten(base, 0.5), (cx - 12, cy - 9, 20, 5))
+        gfx.ellipse(s, darken(base, 0.18), (cx - 8, cy - 11, 16, 22), 1)
+        gfx.ellipse(s, BACTERIUM_OUTLINE, body, 2)
 
     def draw_zeppelin_gauge(self, s, cx, cy):
         display = pygame.Rect(cx - 16, cy - 7, 33, 13)
-        pygame.draw.rect(s, (18, 30, 36), display, border_radius=3)
-        pygame.draw.rect(s, BACTERIUM_OUTLINE, display, 1, border_radius=3)
+        gfx.rect(s, (18, 30, 36), display, border_radius=3)
+        gfx.rect(s, BACTERIUM_OUTLINE, display, 1, border_radius=3)
         color = gv_bar_color(self.gv_level)
         fill_width = int((display.width - 4) * self.gv_level / 100.0)
         if fill_width > 0:
-            pygame.draw.rect(s, darken(color, 0.55), (display.x + 2, display.y + 2, fill_width, display.height - 4))
-        text = GAUGE_FONT.render(f"{self.gv_level:.0f}%", True, lighten(color, 0.5))
-        s.blit(text, text.get_rect(center=(display.centerx, display.centery)))
+            gfx.rect(s, darken(color, 0.55), (display.x + 2, display.y + 2, fill_width, display.height - 4))
+        label = f"{self.gv_level:.0f}%"
+        if isinstance(s, ScaledCanvas):
+            # Render the label at the big size instead of stretching a tiny bitmap.
+            font = gauge_font(max(8, round(11 * s.scale)))
+            text = font.render(label, True, lighten(color, 0.5))
+            s.surface.blit(text, text.get_rect(center=(display.centerx * s.scale, display.centery * s.scale)))
+        else:
+            text = GAUGE_FONT.render(label, True, lighten(color, 0.5))
+            s.blit(text, text.get_rect(center=(display.centerx, display.centery)))
 
     @staticmethod
     def draw_ecoli(s, cx, cy, t):
@@ -1184,13 +1312,13 @@ class Bacterium:
                 px = cx - 17 - step * 1.4
                 py = cy + offset + step * 0.45 + math.sin(t * 14 - step * 0.9 + index) * 2.0
                 points.append((px, py))
-            pygame.draw.lines(s, flagellum, False, points, 2)
+            gfx.lines(s, flagellum, False, points, 2)
 
         body = pygame.Rect(cx - 20, cy - 13, 40, 26)
-        pygame.draw.rect(s, darken(color, 0.3), body, border_radius=13)
-        pygame.draw.rect(s, color, (cx - 18, cy - 12, 36, 20), border_radius=10)
-        pygame.draw.rect(s, lighten(color, 0.45), (cx - 12, cy - 9, 22, 4), border_radius=2)
-        pygame.draw.rect(s, BACTERIUM_OUTLINE, body, 2, border_radius=13)
+        gfx.rect(s, darken(color, 0.3), body, border_radius=13)
+        gfx.rect(s, color, (cx - 18, cy - 12, 36, 20), border_radius=10)
+        gfx.rect(s, lighten(color, 0.45), (cx - 12, cy - 9, 22, 4), border_radius=2)
+        gfx.rect(s, BACTERIUM_OUTLINE, body, 2, border_radius=13)
 
     @staticmethod
     def draw_hek(s, cx, cy, t):
@@ -1199,13 +1327,13 @@ class Bacterium:
             angle = step / 28 * math.tau
             radius = 19 + math.sin(angle * 5 + t * 3) * 1.2
             points.append((cx + math.cos(angle) * radius, cy + math.sin(angle) * radius))
-        pygame.draw.polygon(s, darken(HEK_COLOR, 0.25), points)
-        pygame.draw.circle(s, HEK_COLOR, (cx - 2, cy - 2), 16)
-        pygame.draw.circle(s, lighten(HEK_COLOR, 0.35), (cx - 8, cy - 8), 5)
-        pygame.draw.circle(s, darken(HEK_NUCLEUS, 0.2), (cx + 4, cy + 2), 8)
-        pygame.draw.circle(s, HEK_NUCLEUS, (cx + 3, cy + 1), 7)
-        pygame.draw.circle(s, darken(HEK_NUCLEUS, 0.45), (cx + 5, cy + 3), 2)
-        pygame.draw.polygon(s, BACTERIUM_OUTLINE, points, 2)
+        gfx.polygon(s, darken(HEK_COLOR, 0.25), points)
+        gfx.circle(s, HEK_COLOR, (cx - 2, cy - 2), 16)
+        gfx.circle(s, lighten(HEK_COLOR, 0.35), (cx - 8, cy - 8), 5)
+        gfx.circle(s, darken(HEK_NUCLEUS, 0.2), (cx + 4, cy + 2), 8)
+        gfx.circle(s, HEK_NUCLEUS, (cx + 3, cy + 1), 7)
+        gfx.circle(s, darken(HEK_NUCLEUS, 0.45), (cx + 5, cy + 3), 2)
+        gfx.polygon(s, BACTERIUM_OUTLINE, points, 2)
 
     @staticmethod
     def draw_anabaena(s, cx, cy, t):
@@ -1213,15 +1341,15 @@ class Bacterium:
         for index, dx in enumerate((-14, 0, 14)):
             bend = math.sin(t * 2 + index) * 1.5
             center = (cx + dx, int(cy + bend))
-            pygame.draw.circle(s, darken(color, 0.3), center, 11)
-            pygame.draw.circle(s, color, (center[0] - 1, center[1] - 1), 9)
-            pygame.draw.circle(s, lighten(color, 0.4), (center[0] - 4, center[1] - 4), 3)
+            gfx.circle(s, darken(color, 0.3), center, 11)
+            gfx.circle(s, color, (center[0] - 1, center[1] - 1), 9)
+            gfx.circle(s, lighten(color, 0.4), (center[0] - 4, center[1] - 4), 3)
         # Thicker heterocyst at the end of the filament.
         heterocyst = (cx + 14, int(cy + math.sin(t * 2 + 2) * 1.5))
-        pygame.draw.circle(s, lighten(color, 0.45), heterocyst, 7)
-        pygame.draw.circle(s, darken(color, 0.45), heterocyst, 7, 2)
+        gfx.circle(s, lighten(color, 0.45), heterocyst, 7)
+        gfx.circle(s, darken(color, 0.45), heterocyst, 7, 2)
         for index, dx in enumerate((-14, 0, 14)):
-            pygame.draw.circle(
+            gfx.circle(
                 s, darken(color, 0.5), (cx + dx, int(cy + math.sin(t * 2 + index) * 1.5)), 11, 2
             )
 
@@ -1230,19 +1358,19 @@ class Bacterium:
         color = YEAST_COLOR
         # A daughter bud pinching off the mother cell.
         bud_center = (cx + 13, cy - 11 + int(math.sin(t * 2) * 1.5))
-        pygame.draw.circle(s, darken(color, 0.3), bud_center, 9)
-        pygame.draw.circle(s, color, (bud_center[0] - 1, bud_center[1] - 1), 7)
+        gfx.circle(s, darken(color, 0.3), bud_center, 9)
+        gfx.circle(s, color, (bud_center[0] - 1, bud_center[1] - 1), 7)
 
-        pygame.draw.circle(s, darken(color, 0.3), (cx - 3, cy + 2), 18)
-        pygame.draw.circle(s, color, (cx - 4, cy), 15)
-        pygame.draw.circle(s, lighten(color, 0.45), (cx - 10, cy - 7), 5)
-        pygame.draw.circle(s, YEAST_VACUOLE, (cx + 1, cy + 5), 6)
-        pygame.draw.circle(s, darken(YEAST_VACUOLE, 0.3), (cx + 1, cy + 5), 6, 1)
+        gfx.circle(s, darken(color, 0.3), (cx - 3, cy + 2), 18)
+        gfx.circle(s, color, (cx - 4, cy), 15)
+        gfx.circle(s, lighten(color, 0.45), (cx - 10, cy - 7), 5)
+        gfx.circle(s, YEAST_VACUOLE, (cx + 1, cy + 5), 6)
+        gfx.circle(s, darken(YEAST_VACUOLE, 0.3), (cx + 1, cy + 5), 6, 1)
         # Bud scars left over from earlier divisions.
         for dx, dy in ((-14, 8), (-9, -13)):
-            pygame.draw.circle(s, darken(color, 0.4), (cx + dx, cy + dy), 3, 1)
-        pygame.draw.circle(s, darken(color, 0.55), (cx - 3, cy + 2), 18, 2)
-        pygame.draw.circle(s, darken(color, 0.55), bud_center, 9, 2)
+            gfx.circle(s, darken(color, 0.4), (cx + dx, cy + dy), 3, 1)
+        gfx.circle(s, darken(color, 0.55), (cx - 3, cy + 2), 18, 2)
+        gfx.circle(s, darken(color, 0.55), bud_center, 9, 2)
 
     @staticmethod
     def draw_salmonella(s, cx, cy, t):
@@ -1256,13 +1384,34 @@ class Bacterium:
                 px = cx + ax - step * 1.9
                 py = cy + ay + direction * step * 0.9 + math.sin(t * 12 - step * 0.8 + index) * 2.2
                 points.append((px, py))
-            pygame.draw.lines(s, flagellum, False, points, 2)
+            gfx.lines(s, flagellum, False, points, 2)
 
         body = pygame.Rect(cx - 19, cy - 12, 38, 24)
-        pygame.draw.rect(s, darken(color, 0.32), body, border_radius=12)
-        pygame.draw.rect(s, color, (cx - 17, cy - 11, 34, 18), border_radius=9)
-        pygame.draw.rect(s, lighten(color, 0.5), (cx - 11, cy - 8, 20, 4), border_radius=2)
-        pygame.draw.rect(s, BACTERIUM_OUTLINE, body, 2, border_radius=12)
+        gfx.rect(s, darken(color, 0.32), body, border_radius=12)
+        gfx.rect(s, color, (cx - 17, cy - 11, 34, 18), border_radius=9)
+        gfx.rect(s, lighten(color, 0.5), (cx - 11, cy - 8, 20, 4), border_radius=2)
+        gfx.rect(s, BACTERIUM_OUTLINE, body, 2, border_radius=12)
+
+    @staticmethod
+    def draw_serratia(s, cx, cy, t):
+        color = SERRATIA_COLOR
+        flagellum = darken(color, 0.35)
+        for index, (ax, ay, direction) in enumerate(((-18, -7, -1), (-19, 0, 0), (-18, 7, 1))):
+            points = []
+            for step in range(9):
+                px = cx + ax - step * 1.5
+                py = cy + ay + direction * step * 0.7 + math.sin(t * 13 - step * 0.9 + index) * 2.0
+                points.append((px, py))
+            gfx.lines(s, flagellum, False, points, 2)
+
+        body = pygame.Rect(cx - 20, cy - 13, 40, 26)
+        gfx.rect(s, darken(color, 0.4), body, border_radius=13)
+        gfx.rect(s, color, (cx - 18, cy - 12, 36, 20), border_radius=10)
+        gfx.rect(s, lighten(color, 0.5), (cx - 12, cy - 9, 22, 4), border_radius=2)
+        # Prodigiosin: the red pigment Serratia is known for, as dark granules.
+        for dx, dy in ((-11, 3), (-3, 5), (6, 3), (13, 5)):
+            gfx.circle(s, darken(color, 0.5), (cx + dx, cy + dy), 2)
+        gfx.rect(s, BACTERIUM_OUTLINE, body, 2, border_radius=13)
 
     @staticmethod
     def draw_halobacterium(s, cx, cy, t):
@@ -1272,14 +1421,14 @@ class Bacterium:
             fraction = step / 8
             px = cx - 18 + fraction * 36
             py = cy + math.sin(fraction * math.pi) * -3 + math.sin(t * 2) * 1.0
-            pygame.draw.circle(s, darken(color, 0.32), (int(px), int(py)), 12)
+            gfx.circle(s, darken(color, 0.32), (int(px), int(py)), 12)
         for step in range(9):
             fraction = step / 8
             px = cx - 17 + fraction * 34
             py = cy - 1 + math.sin(fraction * math.pi) * -3 + math.sin(t * 2) * 1.0
-            pygame.draw.circle(s, color, (int(px), int(py)), 9)
+            gfx.circle(s, color, (int(px), int(py)), 9)
             if step % 2 == 0:
-                pygame.draw.circle(s, lighten(color, 0.4), (int(px), int(py - 4)), 2)
+                gfx.circle(s, lighten(color, 0.4), (int(px), int(py - 4)), 2)
 
     @staticmethod
     def draw_biobrick(s, cx, cy, color=BIOBRICK_COLOR):
@@ -1287,15 +1436,15 @@ class Bacterium:
         # A sealed, opaque casing: no gas vesicles are ever shown through it.
         for dx in (-13, 0, 13):
             stud = pygame.Rect(cx + dx - 6, cy - 17, 12, 8)
-            pygame.draw.ellipse(s, darken(color, 0.4), (stud.x, stud.y + 2, stud.width, 7))
-            pygame.draw.ellipse(s, color, (stud.x, stud.y, stud.width, 7))
-            pygame.draw.ellipse(s, lighten(color, 0.4), (stud.x + 2, stud.y + 1, 8, 3))
+            gfx.ellipse(s, darken(color, 0.4), (stud.x, stud.y + 2, stud.width, 7))
+            gfx.ellipse(s, color, (stud.x, stud.y, stud.width, 7))
+            gfx.ellipse(s, lighten(color, 0.4), (stud.x + 2, stud.y + 1, 8, 3))
 
         body = pygame.Rect(cx - 20, cy - 12, 40, 24)
-        pygame.draw.rect(s, darken(color, 0.35), body, border_radius=2)
-        pygame.draw.rect(s, color, (body.x, body.y, body.width, body.height - 5), border_radius=2)
-        pygame.draw.rect(s, lighten(color, 0.45), (body.x + 3, body.y + 2, body.width - 6, 3))
-        pygame.draw.rect(s, darken(color, 0.55), body, 2, border_radius=2)
+        gfx.rect(s, darken(color, 0.35), body, border_radius=2)
+        gfx.rect(s, color, (body.x, body.y, body.width, body.height - 5), border_radius=2)
+        gfx.rect(s, lighten(color, 0.45), (body.x + 3, body.y + 2, body.width - 6, 3))
+        gfx.rect(s, darken(color, 0.55), body, 2, border_radius=2)
 
     @staticmethod
     def draw_igem_legacy(s, cx, cy, t):
@@ -1304,18 +1453,18 @@ class Bacterium:
             (232, 181, 61), (235, 80, 80), (95, 215, 205),
             (120, 240, 120), (150, 205, 235), (235, 225, 130),
         )
-        pygame.draw.circle(s, darken((232, 181, 61), 0.55), (cx, cy), 21, 2)
+        gfx.circle(s, darken((232, 181, 61), 0.55), (cx, cy), 21, 2)
         for index, color in enumerate(palette):
             angle = t * 0.6 + index / len(palette) * math.tau
             px = cx + math.cos(angle) * 15
             py = cy + math.sin(angle) * 15
             brick = pygame.Rect(0, 0, 11, 9)
             brick.center = (int(px), int(py))
-            pygame.draw.rect(s, darken(color, 0.4), brick, border_radius=2)
-            pygame.draw.rect(s, color, brick.inflate(-3, -3), border_radius=1)
+            gfx.rect(s, darken(color, 0.4), brick, border_radius=2)
+            gfx.rect(s, color, brick.inflate(-3, -3), border_radius=1)
         core_pulse = 0.5 + 0.5 * math.sin(t * 3)
-        pygame.draw.circle(s, lerp_color((232, 181, 61), WHITE, core_pulse * 0.4), (cx, cy), 6)
-        pygame.draw.circle(s, darken((232, 181, 61), 0.4), (cx, cy), 6, 1)
+        gfx.circle(s, lerp_color((232, 181, 61), WHITE, core_pulse * 0.4), (cx, cy), 6)
+        gfx.circle(s, darken((232, 181, 61), 0.4), (cx, cy), 6, 1)
 
     @staticmethod
     def draw_purified(s, cx, cy, t, visible_gvs):
@@ -1323,11 +1472,11 @@ class Bacterium:
             bob = math.sin(t * 2.5 + index * 1.3) * 1.2
             rect = pygame.Rect(cx + dx - 3, cy + dy - 6 + bob, 7, 13)
             if index < visible_gvs:
-                pygame.draw.ellipse(s, GV_COLOR, rect)
-                pygame.draw.ellipse(s, GV_OUTLINE, rect, 1)
-                pygame.draw.line(s, WHITE, (rect.x + 2, rect.y + 3), (rect.x + 2, rect.y + 6))
+                gfx.ellipse(s, GV_COLOR, rect)
+                gfx.ellipse(s, GV_OUTLINE, rect, 1)
+                gfx.line(s, WHITE, (rect.x + 2, rect.y + 3), (rect.x + 2, rect.y + 6))
             else:
-                pygame.draw.ellipse(s, (110, 165, 185, 170), rect, 1)
+                gfx.ellipse(s, (110, 165, 185, 170), rect, 1)
 
     def get_rect(self):
         return pygame.Rect(
@@ -2262,7 +2411,7 @@ def draw_module_status(bacterium, area):
         pygame.draw.rect(screen, color, (bar.x, bar.y, left, bar.height), border_radius=2)
 
 
-def draw_hud(bacterium, score, level, biome_name, best_score, coins):
+def draw_hud(bacterium, score, level_text, biome_name, best_score, coins):
     gv_panel = pygame.Rect(15, 12, 285, 128)
     draw_panel(gv_panel)
 
@@ -2328,7 +2477,6 @@ def draw_hud(bacterium, score, level, biome_name, best_score, coins):
     blit_text(BIG_FONT, str(score), WHITE, (WIDTH // 2, 28), anchor="midtop")
     blit_text(SMALL_FONT, f"BEST {best_score}", GRAY, (WIDTH // 2, 74), anchor="midtop", shadow=False)
 
-    level_text = f"Level {level}" if score >= LEVEL_START_SCORE else "Warm-up"
     info = SMALL_FONT.render(f"{level_text}   ·   {biome_name}", True, WHITE)
     info_rect = info.get_rect(midtop=(WIDTH // 2, 100))
     draw_panel(info_rect.inflate(26, 8), alpha=150, border_alpha=70, radius=13)
@@ -2383,7 +2531,7 @@ def draw_locked_character_button(rect, character, progress, pending):
     )
 
     preview = Bacterium(character)
-    preview.gv_level = 65.0
+    preview.gv_level = 67.0
     silhouette = pygame.Surface((70, 60), pygame.SRCALPHA)
     preview.x, preview.y = 35, 30
     preview.draw(silhouette, tilt=False, glow=False, trail=False)
@@ -2435,7 +2583,7 @@ def draw_character_button(rect, character, selected, progress):
         preview.biobrick_tier = progress.get("biobrick_tier", 0)
     preview.x = rect.x + 28
     preview.y = rect.centery + (math.sin(now() * 3) * 2 if selected else 0)
-    preview.gv_level = 65.0
+    preview.gv_level = 67.0
     preview.draw(screen, tilt=False, trail=False)
 
     blit_text(
@@ -2466,25 +2614,6 @@ def draw_character_button(rect, character, selected, progress):
         )
     elif selected:
         blit_text(TINY_FONT, "SELECTED", YELLOW, (rect.right - 12, rect.y + 7), anchor="topright", shadow=False)
-
-
-def draw_section_header(rect, title, detail, is_open):
-    mouse_over = rect.collidepoint(pygame.mouse.get_pos())
-    draw_panel(
-        rect,
-        alpha=210 if mouse_over else 175,
-        border=YELLOW if is_open else PANEL_BORDER,
-        border_alpha=200 if (mouse_over or is_open) else 90,
-        radius=10,
-    )
-    cx, cy = rect.x + 20, rect.centery
-    if is_open:
-        arrow = [(cx - 6, cy - 3), (cx + 6, cy - 3), (cx, cy + 4)]
-    else:
-        arrow = [(cx - 3, cy - 6), (cx - 3, cy + 6), (cx + 4, cy)]
-    pygame.draw.polygon(screen, YELLOW if is_open else PANEL_BORDER, arrow)
-    blit_text(SMALL_FONT, title, WHITE, (rect.x + 36, cy), anchor="midleft", shadow=False)
-    blit_text(SMALL_FONT, detail, GVPC_CORE, (rect.right - 14, cy), anchor="midright", shadow=False, alpha=220)
 
 
 def draw_upgrade_button(rect, kind, level, coins, pending):
@@ -2765,13 +2894,16 @@ def draw_stats_page(progress, best_score, back_rect):
     blit_text(FONT, "BACK", WHITE, back_rect.center, anchor="center", shadow=False)
 
 
-def menu_layout(open_section):
-    """Only one of the two foldable sections is open at a time, so both fit."""
+def menu_layout():
     grant_rect = pygame.Rect(WIDTH // 2 - 280, 558, 560, 38)
+    diff_panel = pygame.Rect(620, 112, 250, 210)
     rects = {
-        "skins_header": pygame.Rect(WIDTH // 2 - 240, 96, 480, 32),
-        "characters": [],
-        "upgrades": {},
+        "showcase": pygame.Rect(300, 92, 300, 330),
+        "change": pygame.Rect(330, 372, 240, 38),
+        "shop": pygame.Rect(30, 112, 250, 104),
+        "difficulty": diff_panel,
+        "diff_prev": pygame.Rect(diff_panel.x + 14, diff_panel.y + 40, 30, 30),
+        "diff_next": pygame.Rect(diff_panel.right - 44, diff_panel.y + 40, 30, 30),
         "start": pygame.Rect(WIDTH // 2 - 150, 452, 300, 56),
         "promo": pygame.Rect(618, 460, 232, 40),
         "missions": pygame.Rect(50, 460, 232, 62),
@@ -2780,31 +2912,26 @@ def menu_layout(open_section):
         "grant_prev": pygame.Rect(grant_rect.x + 196, grant_rect.centery - 13, 26, 26),
         "grant_next": pygame.Rect(grant_rect.x + 276, grant_rect.centery - 13, 26, 26),
         "grant_apply": pygame.Rect(grant_rect.right - 96, grant_rect.y + 2, 86, grant_rect.height - 4),
+        "back": pygame.Rect(WIDTH // 2 - 90, HEIGHT - 70, 180, 44),
     }
-    y = 134
-    if open_section == "skins":
-        rows = math.ceil(len(CHARACTERS) / 3)
-        rects["characters"] = [
-            pygame.Rect(51 + (index % 3) * 274, y + (index // 3) * 48, 262, 44)
-            for index in range(len(CHARACTERS))
-        ]
-        y += rows * 48 + 4
-    rects["upgrades_header"] = pygame.Rect(WIDTH // 2 - 240, y, 480, 34)
-    y += 42
-    if open_section == "upgrades":
-        # A 2-column grid scales cleanly whether there are 3 modules or more.
-        columns = 2
-        col_gap, row_gap, button_width = 266, 54, 250
-        start_x = (WIDTH - (col_gap * (columns - 1) + button_width)) // 2
-        rects["upgrades"] = {
-            kind: pygame.Rect(
-                start_x + (index % columns) * col_gap,
-                y + (index // columns) * row_gap,
-                button_width,
-                46,
-            )
-            for index, kind in enumerate(MODULE_KINDS)
-        }
+    # Character screen: a 3-column grid of skins.
+    rects["characters"] = [
+        pygame.Rect(51 + (index % 3) * 274, 112 + (index // 3) * 54, 262, 46)
+        for index in range(len(CHARACTERS))
+    ]
+    # Shop screen: a 2-column grid of SpyCatcher upgrades.
+    columns = 2
+    col_gap, row_gap, button_width = 266, 62, 250
+    start_x = (WIDTH - (col_gap * (columns - 1) + button_width)) // 2
+    rects["upgrades"] = {
+        kind: pygame.Rect(
+            start_x + (index % columns) * col_gap,
+            150 + (index // columns) * row_gap,
+            button_width,
+            50,
+        )
+        for index, kind in enumerate(MODULE_KINDS)
+    }
     return rects
 
 
@@ -2860,6 +2987,122 @@ def draw_grant_panel(rect, coins, stake, left_arrow_rect, right_arrow_rect, appl
     )
 
 
+def draw_back_button(rect):
+    mouse_over = rect.collidepoint(pygame.mouse.get_pos())
+    draw_panel(rect, alpha=210 if mouse_over else 180, border=PANEL_BORDER, border_alpha=180, radius=12)
+    blit_text(FONT, "BACK", WHITE, rect.center, anchor="center", shadow=False)
+
+
+def draw_menu_notice(menu, pos, idle_text=None):
+    if menu["notice_timer"] > 0:
+        blit_text(
+            SMALL_FONT,
+            menu["notice"],
+            YELLOW,
+            pos,
+            anchor="midtop",
+            shadow=False,
+            alpha=int(255 * min(1.0, menu["notice_timer"] / 0.4)),
+        )
+    elif idle_text:
+        blit_text(SMALL_FONT, idle_text, GRAY, pos, anchor="midtop", shadow=False)
+
+
+def draw_character_showcase(rect, character, progress, change_rect):
+    """The current character as a large, gently bobbing picture."""
+    t = now()
+    draw_panel(rect, alpha=205, border=YELLOW, border_alpha=210, radius=18)
+
+    # Drawn at twice the on-screen size and smoothed down: crisp edges, real detail.
+    scale, supersample = 3.6, 2
+    size = (76, 60)
+    canvas = ScaledCanvas(size, scale * supersample)
+    preview = Bacterium(character)
+    if character == "BioBrick":
+        preview.biobrick_tier = progress.get("biobrick_tier", 0)
+    preview.gv_level =67.0
+    preview.draw_sprite(canvas, size[0] // 2, size[1] // 2, t)
+    big = pygame.transform.smoothscale(canvas.surface, (int(size[0] * scale), int(size[1] * scale)))
+    bob = math.sin(t * 2.2) * 5
+    center = (rect.centerx, rect.y + 102 + bob)
+    halo = pygame.transform.smoothscale(CHARACTER_GLOW, (280, 280))
+    screen.blit(halo, halo.get_rect(center=center))
+    screen.blit(big, big.get_rect(center=center))
+
+    blit_text(MEDIUM_FONT, character, YELLOW, (rect.centerx, rect.y + 214), anchor="midtop")
+    blit_text(
+        SMALL_FONT,
+        skin_short_text(character, progress),
+        GVPC_CORE,
+        (rect.centerx, rect.y + 254),
+        anchor="midtop",
+        shadow=False,
+    )
+
+    mouse_over = change_rect.collidepoint(pygame.mouse.get_pos())
+    draw_panel(change_rect, alpha=225 if mouse_over else 190, border=YELLOW, border_alpha=255 if mouse_over else 170, radius=10)
+    blit_text(SMALL_FONT, "CHANGE CHARACTER", WHITE, change_rect.center, anchor="center", shadow=False)
+
+
+def draw_shop_button(rect, progress):
+    """A loud, pulsing button: the shop is where coins turn into power."""
+    t = now()
+    mouse_over = rect.collidepoint(pygame.mouse.get_pos())
+    pulse = 0.5 + 0.5 * math.sin(t * 3.5)
+    base = lerp_color((60, 190, 110), (100, 230, 140), pulse)
+    top = lighten(base, 0.25) if mouse_over else base
+    glow = pygame.Surface((rect.width + 40, rect.height + 40), pygame.SRCALPHA)
+    pygame.draw.rect(glow, (110, 240, 150, int(12 + 22 * pulse)), glow.get_rect(), border_radius=26)
+    screen.blit(glow, glow.get_rect(center=rect.center))
+    pygame.draw.rect(screen, darken(base, 0.55), rect.move(0, 5), border_radius=16)
+    pygame.draw.rect(screen, darken(base, 0.15), rect, border_radius=16)
+    pygame.draw.rect(screen, top, (rect.x, rect.y, rect.width, rect.height - 10), border_radius=16)
+    pygame.draw.rect(screen, lighten(top, 0.5), (rect.x + 16, rect.y + 6, rect.width - 32, 5), border_radius=3)
+    pygame.draw.rect(screen, lighten(base, 0.6), rect, 2, border_radius=16)
+
+    draw_coin_icon((rect.x + 40, rect.y + 44), 20)
+    blit_text(BIG_FONT, "SHOP", (12, 50, 28), (rect.x + 74, rect.y + 10), shadow=False)
+    blit_text(TINY_FONT, "SpyCatcher upgrades", (12, 50, 28), (rect.x + 76, rect.y + 62), shadow=False)
+
+    can_buy = any(
+        upgrade_price(progress[key]) is not None and progress["coins"] >= upgrade_price(progress[key])
+        for key in UPGRADE_KEYS
+    )
+    if can_buy:
+        badge = pygame.Rect(0, 0, 58, 24)
+        badge.center = (rect.right - 10, rect.y + 4)
+        pygame.draw.rect(screen, (200, 45, 60), badge.move(0, 2), border_radius=12)
+        pygame.draw.rect(screen, RED, badge, border_radius=12)
+        blit_text(TINY_FONT, "READY", WHITE, badge.center, anchor="center", shadow=False)
+
+
+def draw_difficulty_panel(rect, difficulty, prev_rect, next_rect):
+    draw_panel(rect, alpha=195, border=difficulty["color"], border_alpha=190, radius=14)
+    blit_text(SMALL_FONT, "DIFFICULTY", PANEL_BORDER, (rect.centerx, rect.y + 10), anchor="midtop", shadow=False)
+    for arrow_rect, direction in ((prev_rect, -1), (next_rect, 1)):
+        mouse_over = arrow_rect.collidepoint(pygame.mouse.get_pos())
+        draw_panel(arrow_rect, alpha=220 if mouse_over else 170, border_alpha=200 if mouse_over else 100, radius=8)
+        cx, cy = arrow_rect.center
+        pygame.draw.polygon(
+            screen,
+            WHITE,
+            [(cx + direction * 5, cy), (cx - direction * 4, cy - 7), (cx - direction * 4, cy + 7)],
+        )
+    blit_text(
+        MEDIUM_FONT, difficulty["name"], difficulty["color"],
+        (rect.centerx, prev_rect.centery), anchor="center",
+    )
+    for index, line in enumerate(difficulty_lines(difficulty)):
+        blit_text(
+            TINY_FONT, line, WHITE, (rect.x + 20, rect.y + 90 + index * 24),
+            shadow=False, alpha=225,
+        )
+    blit_text(
+        TINY_FONT, f"Kills pay {KILL_COINS} coins", GVPC_CORE, (rect.x + 20, rect.bottom - 26),
+        shadow=False, alpha=220,
+    )
+
+
 def draw_menu(menu, rects):
     t = now()
     draw_water_background()
@@ -2879,36 +3122,9 @@ def draw_menu(menu, rects):
 
     draw_missions_panel(rects["missions"], menu["progress"]["missions"])
 
-    owned_count = sum(owns(c, menu["progress"]) for c in CHARACTERS)
-    draw_section_header(
-        rects["skins_header"],
-        f"SKINS   {owned_count}/{len(CHARACTERS)}",
-        f"{menu['character']}  ·  {skin_short_text(menu['character'], menu['progress'])}",
-        menu["section"] == "skins",
-    )
-    for character, rect in zip(CHARACTERS, rects["characters"]):
-        if owns(character, menu["progress"]):
-            draw_character_button(rect, character, character == menu["character"], menu["progress"])
-        else:
-            draw_locked_character_button(
-                rect, character, menu["progress"], menu["pending"] == character
-            )
-
-    upgrade_levels = sum(menu["progress"][key] for key in UPGRADE_KEYS)
-    draw_section_header(
-        rects["upgrades_header"],
-        "SPYCATCHER UPGRADES",
-        f"{upgrade_levels}/{len(UPGRADE_KEYS) * UPGRADE_MAX_LEVEL} levels",
-        menu["section"] == "upgrades",
-    )
-    for kind in rects["upgrades"]:
-        draw_upgrade_button(
-            rects["upgrades"][kind],
-            kind,
-            menu["progress"][f"{kind}_level"],
-            menu["coins"],
-            menu["pending"] == f"upgrade:{kind}",
-        )
+    draw_shop_button(rects["shop"], menu["progress"])
+    draw_character_showcase(rects["showcase"], menu["character"], menu["progress"], rects["change"])
+    draw_difficulty_panel(rects["difficulty"], menu["difficulty"], rects["diff_prev"], rects["diff_next"])
 
     draw_promo_field(
         rects["promo"], menu["code_input"], menu["code_focus"], int(now() * 2) % 2 == 0
@@ -2936,18 +3152,7 @@ def draw_menu(menu, rects):
     start_text = MEDIUM_FONT.render("START RUN", True, (60, 35, 5))
     screen.blit(start_text, start_text.get_rect(center=(start_rect.centerx, start_rect.centery - 3)))
 
-    if menu["notice_timer"] > 0:
-        blit_text(
-            SMALL_FONT,
-            menu["notice"],
-            YELLOW,
-            (WIDTH // 2, start_rect.bottom + 4),
-            anchor="midtop",
-            shadow=False,
-            alpha=int(255 * min(1.0, menu["notice_timer"] / 0.4)),
-        )
-    else:
-        blit_text(SMALL_FONT, "or press ENTER", GRAY, (WIDTH // 2, start_rect.bottom + 4), anchor="midtop", shadow=False)
+    draw_menu_notice(menu, (WIDTH // 2, start_rect.bottom + 4), "or press ENTER")
 
     draw_grant_panel(
         rects["grant"],
@@ -2959,8 +3164,51 @@ def draw_menu(menu, rects):
     )
 
 
+def draw_characters_screen(menu, rects):
+    draw_water_background()
+    draw_vignette()
+    blit_text(BIG_FONT, "CHOOSE YOUR CHARACTER", WHITE, (WIDTH // 2, 24), anchor="midtop")
+    draw_coin_counter(menu["coins"], pygame.Rect(15, 12, 170, 36))
+
+    owned_count = sum(owns(c, menu["progress"]) for c in CHARACTERS)
+    blit_text(SMALL_FONT, f"{owned_count}/{len(CHARACTERS)} unlocked", GRAY, (WIDTH // 2, 84), anchor="midtop", shadow=False)
+
+    for character, rect in zip(CHARACTERS, rects["characters"]):
+        if owns(character, menu["progress"]):
+            draw_character_button(rect, character, character == menu["character"], menu["progress"])
+        else:
+            draw_locked_character_button(rect, character, menu["progress"], menu["pending"] == character)
+
+    perk = SKIN_PERKS[menu["character"]]["label"]
+    blit_text(SMALL_FONT, f"{menu['character']}:  {perk}", YELLOW, (WIDTH // 2, 348), anchor="midtop", shadow=False)
+    blit_text(TINY_FONT, "Click a locked skin twice to buy it", GRAY, (WIDTH // 2, 376), anchor="midtop", shadow=False)
+    draw_menu_notice(menu, (WIDTH // 2, 410))
+    draw_back_button(rects["back"])
+
+
+def draw_shop_screen(menu, rects):
+    draw_water_background()
+    draw_vignette()
+    blit_text(TITLE_FONT, "SHOP", WHITE, (WIDTH // 2, 10), anchor="midtop")
+    draw_coin_counter(menu["coins"], pygame.Rect(15, 12, 170, 36))
+    blit_text(SMALL_FONT, "SPYCATCHER UPGRADES", PANEL_BORDER, (WIDTH // 2, 104), anchor="midtop", shadow=False)
+    upgrade_levels = sum(menu["progress"][key] for key in UPGRADE_KEYS)
+    blit_text(
+        TINY_FONT, f"{upgrade_levels}/{len(UPGRADE_KEYS) * UPGRADE_MAX_LEVEL} levels", GRAY,
+        (WIDTH // 2, 126), anchor="midtop", shadow=False,
+    )
+    for kind, rect in rects["upgrades"].items():
+        draw_upgrade_button(
+            rect, kind, menu["progress"][f"{kind}_level"], menu["coins"], menu["pending"] == f"upgrade:{kind}",
+        )
+    blit_text(TINY_FONT, "Click an upgrade twice to buy it", GRAY, (WIDTH // 2, 290), anchor="midtop", shadow=False)
+    draw_menu_notice(menu, (WIDTH // 2, 320))
+    draw_back_button(rects["back"])
+
+
 def make_next_object(
-    x, gap_size, transducers_active, spawn_state, biome=0, force_transducer=False
+    x, gap_size, transducers_active, spawn_state, biome=0, force_transducer=False,
+    collapse_scale=1.0,
 ):
     normals = spawn_state["normal_since_transducer"]
     transducer_allowed = (
@@ -2981,20 +3229,26 @@ def make_next_object(
             spawn_state["collapse_count"] += 1
             collapse_number = spawn_state["collapse_count"]
         spawn_state["normal_since_transducer"] = 0
-        return Transducer(x, kind, collapse_number)
+        transducer = Transducer(x, kind, collapse_number)
+        transducer.collapse_fraction *= collapse_scale
+        return transducer
 
     spawn_state["normal_since_transducer"] += 1
     return Obstacle(x, gap_size, BIOMES[biome]["pillar"])
 
 
-def spawn_bonus(bonuses, x, bacterium, allowed=("coins", "module", "gvpc"), force=None):
+def spawn_bonus(bonuses, x, bacterium, allowed=("coins", "module", "gvpc"), force=None, powerups=1.0):
     """One bonus per gap: a coin arc, a GvpC helix or a SpyCatcher module.
 
     Returns the bonus that was added last, so the tutorial can keep an eye on it.
     """
     kinds = []
     weights = []
-    for kind, weight in (("coins", COIN_WEIGHT), ("module", MODULE_WEIGHT), ("gvpc", GVPC_WEIGHT)):
+    for kind, weight in (
+        ("coins", COIN_WEIGHT),
+        ("module", MODULE_WEIGHT * powerups),
+        ("gvpc", GVPC_WEIGHT * powerups),
+    ):
         if kind in allowed and (kind != "gvpc" or bacterium.shell < MAX_SHELL_LAYERS):
             kinds.append(kind)
             weights.append(weight)
@@ -3354,7 +3608,7 @@ def draw_boss(boss, bacterium):
         pygame.draw.circle(screen, WHITE, spot, 6, 1)
 
 
-def reset_run(character, progress, tutorial=None, calm_start=False):
+def reset_run(character, progress, tutorial=None, calm_start=False, difficulty=None):
     bacterium = Bacterium(character)
     bacterium.apply_upgrades(progress)
     objects = []
@@ -3366,7 +3620,7 @@ def reset_run(character, progress, tutorial=None, calm_start=False):
     }
     # The tutorial pushes the first pillar far enough out for a calm start.
     x = WIDTH + (1100 if calm_start else 180)
-    _, _, gap_size, spacing = difficulty_for_score(0)
+    _, _, gap_size, spacing = difficulty_for_score(0, difficulty)
 
     for _ in range(4):
         objects.append(
@@ -3378,7 +3632,10 @@ def reset_run(character, progress, tutorial=None, calm_start=False):
             )
         )
         if random.random() < BONUS_SPAWN_CHANCE:
-            spawn_bonus(bonuses, x + spacing // 2, bacterium, allowed_bonus_kinds(tutorial))
+            spawn_bonus(
+                bonuses, x + spacing // 2, bacterium, allowed_bonus_kinds(tutorial),
+                powerups=difficulty["powerups"] if difficulty else 1.0,
+            )
         x += spacing
 
     return bacterium, objects, bonuses, [], 0, spawn_state
@@ -3448,12 +3705,12 @@ def main():
     state = "menu"
     running = True
     selected_character = CHARACTERS[0]
+    difficulty = find_difficulty(progress["difficulty"])
     game_over = False
     new_highscore = False
 
-    menu_section = None
-    menu_rects = menu_layout(menu_section)
-    stats_back_rect = pygame.Rect(WIDTH // 2 - 90, HEIGHT - 70, 180, 44)
+    menu_rects = menu_layout()
+    stats_back_rect = menu_rects["back"]
     start_rect = menu_rects["start"]
 
     bacterium = None
@@ -3474,14 +3731,46 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-            elif state == "menu" and event.type == pygame.MOUSEBUTTONDOWN:
+            elif state in ("characters", "shop") and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                state = "menu"
+                pending_purchase = None
+
+            elif state in ("menu", "characters", "shop") and event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     clicked = None
-                    code_focus = menu_rects["promo"].collidepoint(event.pos)
-                    if menu_rects["stats"].collidepoint(event.pos):
+                    code_focus = state == "menu" and menu_rects["promo"].collidepoint(event.pos)
+                    if state != "menu":
+                        if menu_rects["back"].collidepoint(event.pos):
+                            state = "menu"
+                            pending_purchase = None
+                            continue
+                        if state == "characters":
+                            for character, rect in zip(CHARACTERS, menu_rects["characters"]):
+                                if rect.collidepoint(event.pos):
+                                    if owns(character, progress):
+                                        selected_character = character
+                                    else:
+                                        clicked = character
+                                    break
+                        else:
+                            for kind, rect in menu_rects["upgrades"].items():
+                                if rect.collidepoint(event.pos):
+                                    clicked = f"upgrade:{kind}"
+                                    break
+                    elif menu_rects["stats"].collidepoint(event.pos):
                         state = "stats"
                         continue
-                    if menu_rects["grant_prev"].collidepoint(event.pos):
+                    elif menu_rects["change"].collidepoint(event.pos):
+                        state = "characters"
+                    elif menu_rects["shop"].collidepoint(event.pos):
+                        state = "shop"
+                    elif menu_rects["diff_prev"].collidepoint(event.pos) or menu_rects["diff_next"].collidepoint(event.pos):
+                        step = -1 if menu_rects["diff_prev"].collidepoint(event.pos) else 1
+                        index = DIFFICULTIES.index(difficulty)
+                        difficulty = DIFFICULTIES[(index + step) % len(DIFFICULTIES)]
+                        progress["difficulty"] = difficulty["name"]
+                        save_progress(progress)
+                    elif menu_rects["grant_prev"].collidepoint(event.pos):
                         grant_stake_index = (grant_stake_index - 1) % len(GRANT_STAKES)
                     elif menu_rects["grant_next"].collidepoint(event.pos):
                         grant_stake_index = (grant_stake_index + 1) % len(GRANT_STAKES)
@@ -3500,24 +3789,6 @@ def main():
                                 menu_notice = f"Application rejected. -{stake} coins"
                             menu_notice_timer = 2.2
                             save_progress(progress)
-                    elif menu_rects["skins_header"].collidepoint(event.pos):
-                        menu_section = None if menu_section == "skins" else "skins"
-                        menu_rects = menu_layout(menu_section)
-                    elif menu_rects["upgrades_header"].collidepoint(event.pos):
-                        menu_section = None if menu_section == "upgrades" else "upgrades"
-                        menu_rects = menu_layout(menu_section)
-                    else:
-                        for character, rect in zip(CHARACTERS, menu_rects["characters"]):
-                            if rect.collidepoint(event.pos):
-                                if owns(character, progress):
-                                    selected_character = character
-                                else:
-                                    clicked = character
-                                break
-                        for kind, rect in menu_rects["upgrades"].items():
-                            if rect.collidepoint(event.pos):
-                                clicked = f"upgrade:{kind}"
-                                break
 
                     if clicked:
                         if clicked.startswith("upgrade:"):
@@ -3544,11 +3815,11 @@ def main():
                     else:
                         pending_purchase = None
 
-                    if start_rect.collidepoint(event.pos):
+                    if state == "menu" and start_rect.collidepoint(event.pos):
                         tutorial = new_tutorial(progress)
                         tutorial_timer = TUTORIAL_SECONDS if tutorial and tutorial["stage"] == 0 else 0.0
                         bacterium, objects, bonuses, hazards, score, spawn_state = reset_run(
-                            selected_character, progress, tutorial, tutorial_timer > 0
+                            selected_character, progress, tutorial, tutorial_timer > 0, difficulty
                         )
                         run_banner_timer = 0.0
                         run_stats = dict(EMPTY_RUN_STATS)
@@ -3624,7 +3895,7 @@ def main():
                     tutorial = new_tutorial(progress)
                     tutorial_timer = TUTORIAL_SECONDS if tutorial and tutorial["stage"] == 0 else 0.0
                     bacterium, objects, bonuses, hazards, score, spawn_state = reset_run(
-                        selected_character, progress, tutorial, tutorial_timer > 0
+                        selected_character, progress, tutorial, tutorial_timer > 0, difficulty
                     )
                     run_banner_timer = 0.0
                     run_stats = dict(EMPTY_RUN_STATS)
@@ -3645,7 +3916,7 @@ def main():
                     tutorial = new_tutorial(progress)
                     tutorial_timer = TUTORIAL_SECONDS if tutorial and tutorial["stage"] == 0 else 0.0
                     bacterium, objects, bonuses, hazards, score, spawn_state = reset_run(
-                        selected_character, progress, tutorial, tutorial_timer > 0
+                        selected_character, progress, tutorial, tutorial_timer > 0, difficulty
                     )
                     run_banner_timer = 0.0
                     run_stats = dict(EMPTY_RUN_STATS)
@@ -3667,28 +3938,31 @@ def main():
             pygame.display.flip()
             continue
 
-        if state == "menu":
+        if state in ("menu", "characters", "shop"):
             menu_notice_timer = max(0.0, menu_notice_timer - dt)
-            draw_menu(
-                {
-                    "character": selected_character,
-                    "progress": progress,
-                    "coins": progress["coins"],
-                    "best_score": best_score,
-                    "pending": pending_purchase,
-                    "code_input": code_input,
-                    "code_focus": code_focus,
-                    "notice": menu_notice,
-                    "notice_timer": menu_notice_timer,
-                    "section": menu_section,
-                    "grant_stake": GRANT_STAKES[grant_stake_index],
-                },
-                menu_rects,
-            )
+            menu = {
+                "character": selected_character,
+                "progress": progress,
+                "coins": progress["coins"],
+                "best_score": best_score,
+                "pending": pending_purchase,
+                "code_input": code_input,
+                "code_focus": code_focus,
+                "notice": menu_notice,
+                "notice_timer": menu_notice_timer,
+                "difficulty": difficulty,
+                "grant_stake": GRANT_STAKES[grant_stake_index],
+            }
+            if state == "characters":
+                draw_characters_screen(menu, menu_rects)
+            elif state == "shop":
+                draw_shop_screen(menu, menu_rects)
+            else:
+                draw_menu(menu, menu_rects)
             pygame.display.flip()
             continue
 
-        level, speed, gap_size, spacing = difficulty_for_score(score)
+        level, speed, gap_size, spacing = difficulty_for_score(score, difficulty)
         if tutorial:
             transducers_active = tutorial_allows(tutorial, "transducer")
         else:
@@ -3764,7 +4038,9 @@ def main():
                         )
                     )
                     interval = random.uniform(*HAZARD_INTERVAL)
-                    hazard_timer = interval * max(0.6, 1.0 - (level - 1) * 0.04)
+                    hazard_timer = (
+                        interval * max(0.6, 1.0 - (level - 1) * 0.04) / difficulty["hazards"]
+                    )
             for hazard in hazards:
                 hazard.update(speed, frame_scale)
             hazards = [hazard for hazard in hazards if not hazard.off_screen()]
@@ -3827,6 +4103,8 @@ def main():
                     if hazard.collides_with(bacterium):
                         hazard.kill()
                         run_stats["kills"] += 1
+                        progress["coins"] += KILL_COINS
+                        run_stats["coins"] += KILL_COINS
 
             shot_targets = hazards + boss_targets(boss)
             remaining_projectiles = []
@@ -3840,6 +4118,8 @@ def main():
                     target.kill()
                     if isinstance(target, DriftingCell):
                         run_stats["kills"] += 1
+                        progress["coins"] += KILL_COINS
+                        run_stats["coins"] += KILL_COINS
                 elif boss_absorbs(boss, shot):
                     pass
                 elif not shot.off_screen():
@@ -3862,7 +4142,7 @@ def main():
                             run_banner = "Transducers ahead: ultrasound fields join the run"
                             run_banner_color = TRANSDUCER_CORE
                             run_banner_timer = 3.0
-                        elif score == LEVEL_START_SCORE:
+                        elif score == LEVEL_START_SCORE and difficulty["levels"]:
                             run_banner = "Level system on: the current speeds up from here"
                             run_banner_color = YELLOW
                             run_banner_timer = 3.0
@@ -3893,6 +4173,7 @@ def main():
                     spawn_state,
                     biome_index,
                     force_transducer=forcing == "transducer",
+                    collapse_scale=difficulty["transducer"],
                 )
                 objects.append(new_object)
                 if isinstance(new_object, Obstacle):
@@ -3918,12 +4199,14 @@ def main():
                     tutorial["forcing"] = None
                 elif forcing in ("gvpc", "module"):
                     tutorial["watch"] = spawn_bonus(
-                        bonuses, spawn_x + spacing // 2, bacterium, force=forcing
+                        bonuses, spawn_x + spacing // 2, bacterium, force=forcing,
+                        powerups=difficulty["powerups"],
                     )
                     tutorial["forcing"] = None
                 elif random.random() < BONUS_SPAWN_CHANCE:
                     spawn_bonus(
-                        bonuses, spawn_x + spacing // 2, bacterium, allowed_bonus_kinds(tutorial)
+                        bonuses, spawn_x + spacing // 2, bacterium, allowed_bonus_kinds(tutorial),
+                        powerups=difficulty["powerups"],
                     )
 
             if tutorial and tutorial["watch"] and tutorial_watch_visible(tutorial["watch"]):
@@ -3978,7 +4261,7 @@ def main():
         draw_hud(
             bacterium,
             score,
-            level,
+            (f"Level {level}" if level > 1 else "Warm-up") if difficulty["levels"] else difficulty["name"],
             BIOMES[biome_index]["name"],
             best_score,
             progress["coins"],

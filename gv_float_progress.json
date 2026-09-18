@@ -1,8 +1,9 @@
 {
-  "coins": 36,
+  "coins": 1,
   "owned": [
     "BioBrick",
-    "Zeppelin"
+    "Zeppelin",
+    "HEK cell"
   ],
   "codes_used": [
     "heidelberg",
@@ -30,26 +31,28 @@
     }
   ],
   "stats": {
-    "runs": 11,
-    "best_score": 40,
-    "total_score": 139,
-    "coins_earned": 156,
-    "cells_killed": 7,
-    "gvpc": 6,
-    "modules": 6,
+    "runs": 22,
+    "best_score": 47,
+    "total_score": 325,
+    "coins_earned": 321,
+    "cells_killed": 10,
+    "gvpc": 10,
+    "modules": 15,
     "missions_done": 1,
     "bosses_defeated": 0,
     "skin_runs": {
       "E. coli": 10,
-      "Zeppelin": 1
+      "Zeppelin": 8,
+      "HEK cell": 4
     }
   },
   "tutorial_done": true,
   "tutorial_stage": 4,
   "special_prizes": 1,
   "biobrick_tier": 1,
-  "gfp_level": 0,
-  "antibody_level": 2,
-  "granzyme_level": 2,
-  "ampicillin_level": 3
+  "difficulty": "Normal",
+  "gfp_level": 2,
+  "antibody_level": 3,
+  "granzyme_level": 4,
+  "ampicillin_level": 4
 }
