@@ -171,6 +171,9 @@ DEFAULT_DIFFICULTY = "Normal"
 KILL_COINS = 5
 
 
+DIFFICULTY_NAMES = tuple(d["name"] for d in DIFFICULTIES)
+
+
 def find_difficulty(name):
     return next((d for d in DIFFICULTIES if d["name"] == name), None) or next(
         d for d in DIFFICULTIES if d["name"] == DEFAULT_DIFFICULTY
@@ -345,7 +348,7 @@ UPGRADE_KEYS = tuple(f"{kind}_level" for kind in MODULE_KINDS)
 HAZARD_KINDS = ("macrophage", "ciliate")
 HAZARD_INTERVAL = (2.6, 5.2)
 
-# Macrophage boss: a giant macrophage docks at the right edge every
+# Dendritic-cell boss: a giant dendritic cell docks at the right edge every
 # BOSS_SCORE_INTERVAL points. The player always has Ampicillin (it refills
 # during the fight); the only way to hurt the boss is to shoot the weak spots
 # it exposes now and then. It lashes out with telegraphed tentacles and spits
@@ -371,7 +374,7 @@ BOSS_TENTACLE_LENGTH = 1100
 BOSS_TENTACLE_HIT_WIDTH = 14
 BOSS_REWARD_COINS = 40
 BOSS_REWARD_PER_STAGE = 10
-BOSS_COLOR = (212, 118, 162)
+BOSS_COLOR = (150, 112, 215)
 BOSS_WEAK_COLOR = (255, 205, 90)
 
 # Highscores
@@ -581,13 +584,13 @@ def blit_text(font, text, color, pos, anchor="topleft", shadow=True, alpha=255):
 
 
 def load_progress():
-    """Coins, bought skins and upgrade levels. The personal best lives in stats["best_score"]."""
+    """Coins, bought skins and upgrade levels. Personal bests live in stats["best_by_difficulty"]."""
     progress = {
         "coins": 0,
         "owned": [],
         "codes_used": [],
         "missions": [],
-        "stats": dict(EMPTY_STATS),
+        "stats": {key: dict(value) if isinstance(value, dict) else value for key, value in EMPTY_STATS.items()},
         "tutorial_done": False,
         "tutorial_stage": 0,
         "special_prizes": 0,
@@ -616,13 +619,22 @@ def load_progress():
         ]
         stats = data.get("stats", {})
         for key in EMPTY_STATS:
-            if key == "skin_runs":
+            if key == "best_by_difficulty":
+                bests = stats.get(key, {})
+                progress["stats"][key] = {
+                    name: max(0, int(value)) for name, value in bests.items()
+                    if name in DIFFICULTY_NAMES
+                } if isinstance(bests, dict) else {}
+            elif key == "skin_runs":
                 runs = stats.get(key, {})
                 progress["stats"][key] = {
                     name: int(count) for name, count in runs.items() if name in SKIN_PRICES
                 } if isinstance(runs, dict) else {}
             else:
                 progress["stats"][key] = max(0, int(stats.get(key, 0)))
+        if "best_by_difficulty" not in stats:
+            # Saves from before per-difficulty bests: those runs were all Normal.
+            progress["stats"]["best_by_difficulty"] = {DEFAULT_DIFFICULTY: progress["stats"]["best_score"]}
         progress["codes_used"] = [
             str(code).lower() for code in data.get("codes_used", []) if code in PROMO_CODES
         ]
@@ -631,6 +643,10 @@ def load_progress():
     except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
         pass
     return progress
+
+
+def best_for(progress, difficulty):
+    return progress["stats"]["best_by_difficulty"].get(difficulty["name"], 0)
 
 
 def save_progress(progress):
@@ -681,6 +697,7 @@ def check_final_skin_unlock(progress):
 EMPTY_STATS = {
     "runs": 0,
     "best_score": 0,
+    "best_by_difficulty": {},
     "total_score": 0,
     "coins_earned": 0,
     "cells_killed": 0,
@@ -728,8 +745,10 @@ def check_missions(progress, run_stats):
     return done
 
 
-def record_run(progress, character, score, run_stats):
+def record_run(progress, character, score, run_stats, difficulty):
     stats = progress["stats"]
+    bests = stats["best_by_difficulty"]
+    bests[difficulty["name"]] = max(bests.get(difficulty["name"], 0), score)
     stats["runs"] += 1
     stats["total_score"] += score
     stats["best_score"] = max(stats["best_score"], score)
@@ -2036,7 +2055,7 @@ class AmpicillinShot:
 
 
 class BossWeakpoint:
-    """The soft spot on the macrophage. Shoot it while it is exposed."""
+    """The soft spot on the dendritic cell. Shoot it while it is exposed."""
 
     radius = 17
 
@@ -2860,7 +2879,7 @@ def draw_tutorial_card(feature, watch, stage):
     )
 
 
-def draw_stats_page(progress, best_score, back_rect):
+def draw_stats_page(progress, back_rect):
     draw_water_background()
     draw_vignette()
     blit_text(TITLE_FONT, "STATISTICS", WHITE, (WIDTH // 2, 24), anchor="midtop")
@@ -2870,7 +2889,10 @@ def draw_stats_page(progress, best_score, back_rect):
     average = stats["total_score"] / stats["runs"] if stats["runs"] else 0
     rows = [
         ("Runs played", str(stats["runs"])),
-        ("Best score", str(max(best_score, stats["best_score"]))),
+        *[
+            (f"Best score · {d['name']}", str(best_for(progress, d)))
+            for d in DIFFICULTIES
+        ],
         ("Average score", f"{average:.1f}"),
         ("Coins collected", str(stats["coins_earned"])),
         ("Coins in the bank", str(progress["coins"])),
@@ -2882,10 +2904,10 @@ def draw_stats_page(progress, best_score, back_rect):
         ("Skins owned", f"{sum(owns(c, progress) for c in CHARACTERS)}/{len(CHARACTERS)}"),
         ("Favourite skin", favourite),
     ]
-    card = pygame.Rect(WIDTH // 2 - 290, 120, 580, len(rows) * 28 + 24)
+    card = pygame.Rect(WIDTH // 2 - 290, 100, 580, len(rows) * 26 + 24)
     draw_panel(card, alpha=215, border_alpha=140, radius=16)
     for index, (label, value) in enumerate(rows):
-        row_y = card.y + 14 + index * 28
+        row_y = card.y + 14 + index * 26
         blit_text(FONT, label, WHITE, (card.x + 24, row_y), shadow=False, alpha=210)
         blit_text(FONT, value, YELLOW, (card.right - 24, row_y), anchor="topright", shadow=False)
 
@@ -2896,7 +2918,7 @@ def draw_stats_page(progress, best_score, back_rect):
 
 def menu_layout():
     grant_rect = pygame.Rect(WIDTH // 2 - 280, 558, 560, 38)
-    diff_panel = pygame.Rect(620, 112, 250, 210)
+    diff_panel = pygame.Rect(620, 112, 250, 240)
     rects = {
         "showcase": pygame.Rect(300, 92, 300, 330),
         "change": pygame.Rect(330, 372, 240, 38),
@@ -3076,7 +3098,7 @@ def draw_shop_button(rect, progress):
         blit_text(TINY_FONT, "READY", WHITE, badge.center, anchor="center", shadow=False)
 
 
-def draw_difficulty_panel(rect, difficulty, prev_rect, next_rect):
+def draw_difficulty_panel(rect, difficulty, best, prev_rect, next_rect):
     draw_panel(rect, alpha=195, border=difficulty["color"], border_alpha=190, radius=14)
     blit_text(SMALL_FONT, "DIFFICULTY", PANEL_BORDER, (rect.centerx, rect.y + 10), anchor="midtop", shadow=False)
     for arrow_rect, direction in ((prev_rect, -1), (next_rect, 1)):
@@ -3098,9 +3120,10 @@ def draw_difficulty_panel(rect, difficulty, prev_rect, next_rect):
             shadow=False, alpha=225,
         )
     blit_text(
-        TINY_FONT, f"Kills pay {KILL_COINS} coins", GVPC_CORE, (rect.x + 20, rect.bottom - 26),
+        TINY_FONT, f"Kills pay {KILL_COINS} coins", GVPC_CORE, (rect.x + 20, rect.bottom - 50),
         shadow=False, alpha=220,
     )
+    blit_text(SMALL_FONT, f"BEST  {best}", YELLOW, (rect.x + 20, rect.bottom - 30), shadow=False)
 
 
 def draw_menu(menu, rects):
@@ -3124,7 +3147,7 @@ def draw_menu(menu, rects):
 
     draw_shop_button(rects["shop"], menu["progress"])
     draw_character_showcase(rects["showcase"], menu["character"], menu["progress"], rects["change"])
-    draw_difficulty_panel(rects["difficulty"], menu["difficulty"], rects["diff_prev"], rects["diff_next"])
+    draw_difficulty_panel(rects["difficulty"], menu["difficulty"], menu["best_score"], rects["diff_prev"], rects["diff_next"])
 
     draw_promo_field(
         rects["promo"], menu["code_input"], menu["code_focus"], int(now() * 2) % 2 == 0
@@ -3300,7 +3323,7 @@ def boss_hits_needed(stage):
 
 
 def start_boss(next_score):
-    """Spins up a fresh macrophage encounter. `next_score` is the milestone that triggered it."""
+    """Spins up a fresh dendritic-cell encounter. `next_score` is the milestone that triggered it."""
     stage = max(1, next_score // BOSS_SCORE_INTERVAL)
     return {
         "stage": stage,
@@ -3400,7 +3423,7 @@ def boss_spit_cells(boss, hazards):
 
 
 def update_boss(boss, dt, hazards, bacterium):
-    """Advances the macrophage fight by one frame; may add cells to `hazards`.
+    """Advances the dendritic-cell fight by one frame; may add cells to `hazards`.
 
     Returns "defeated" the one frame the fight is won, else None.
     """
@@ -3517,26 +3540,59 @@ def draw_boss_body(surface, boss, t):
     if defeated:
         progress = 1 - clamp(boss["timer"] / BOSS_DEFEATED_SECONDS, 0.0, 1.0)
         center = (int(x + math.sin(t * 45) * 7 * (1 - progress)), center[1])
-    draw_glow_blob(surface, center, int(BOSS_RADIUS * 1.5), (255, 120, 90), 55)
+    draw_glow_blob(surface, center, int(BOSS_RADIUS * 1.5), (170, 130, 255), 55)
 
     color = BOSS_COLOR
     if boss["hurt_flash"] > 0:
         color = lerp_color(BOSS_COLOR, WHITE, boss["hurt_flash"] / 0.35)
-    points = []
-    for step in range(48):
-        angle = step / 48 * math.tau
-        reach = BOSS_RADIUS + math.sin(angle * 5 + t * 1.8) * 6 + math.sin(angle * 3 - t * 1.1) * 5
-        if boss["spit_flash"] > 0 and math.cos(angle) < -0.6:
-            reach += 10 * (boss["spit_flash"] / 0.45)
-        points.append((center[0] + math.cos(angle) * reach, center[1] + math.sin(angle) * reach))
-    pygame.draw.polygon(surface, darken(color, 0.35), points)
-    pygame.draw.circle(surface, color, (center[0] - 10, center[1] - 8), int(BOSS_RADIUS * 0.82))
-    pygame.draw.polygon(surface, darken(color, 0.6), points, 3)
-    for dx, dy, radius in ((-38, 18, 16), (14, -34, 13), (36, 30, 18), (-8, -6, 10), (60, -10, 12)):
-        pygame.draw.circle(surface, darken(color, 0.5), (center[0] + dx, center[1] + dy), radius)
-        pygame.draw.circle(surface, darken(color, 0.3), (center[0] + dx, center[1] + dy), radius, 2)
-    pygame.draw.circle(surface, darken(color, 0.55), (center[0] - 20, center[1] + 4), 26)
-    pygame.draw.circle(surface, darken(color, 0.25), (center[0] - 20, center[1] + 4), 26, 3)
+    core = int(BOSS_RADIUS * 0.66)
+    outline = darken(color, 0.55)
+
+    # Dendrites: long, waving, forked arms all the way around the cell body.
+    arms = 16
+    for index in range(arms):
+        angle = index / arms * math.tau + math.sin(t * 0.8 + index) * 0.05
+        ux, uy = math.cos(angle), math.sin(angle)
+        nx, ny = -uy, ux
+        length = BOSS_RADIUS * (0.98 + 0.06 * math.sin(t * 1.7 + index * 1.9))
+        if boss["spit_flash"] > 0 and ux < -0.6:
+            length += 12 * (boss["spit_flash"] / 0.45)
+        tip = (center[0] + ux * length, center[1] + uy * length)
+        points = []
+        for step in range(7):
+            fraction = step / 6
+            reach = core * 0.6 + (length - core * 0.6) * fraction
+            wave = math.sin(fraction * 5 - t * 2.4 + index) * 5 * fraction
+            points.append((center[0] + ux * reach + nx * wave, center[1] + uy * reach + ny * wave))
+        for a_index in range(len(points) - 1):
+            width = int(17 - 11 * a_index / 6)
+            pygame.draw.line(surface, outline, points[a_index], points[a_index + 1], width + 4)
+        for a_index in range(len(points) - 1):
+            width = int(17 - 11 * a_index / 6)
+            pygame.draw.line(surface, color, points[a_index], points[a_index + 1], width)
+        # A fork at the end of each dendrite.
+        fork_from = points[4]
+        for side in (-1, 1):
+            fork_angle = angle + side * 0.5
+            fork_to = (
+                fork_from[0] + math.cos(fork_angle) * BOSS_RADIUS * 0.3,
+                fork_from[1] + math.sin(fork_angle) * BOSS_RADIUS * 0.3,
+            )
+            pygame.draw.line(surface, outline, fork_from, fork_to, 9)
+            pygame.draw.line(surface, color, fork_from, fork_to, 5)
+        pygame.draw.circle(surface, lighten(color, 0.25), (int(tip[0]), int(tip[1])), 5)
+
+    pygame.draw.circle(surface, outline, center, core + 4)
+    pygame.draw.circle(surface, darken(color, 0.25), center, core)
+    pygame.draw.circle(surface, color, (center[0] - 8, center[1] - 10), int(core * 0.86))
+    pygame.draw.circle(surface, lighten(color, 0.35), (center[0] - 30, center[1] - 34), 12)
+    # A lobed nucleus, the way dendritic cells carry it.
+    for dx, dy, radius in ((-26, 8, 26), (-2, 16, 22), (-12, -14, 20)):
+        pygame.draw.circle(surface, darken(color, 0.55), (center[0] + dx, center[1] + dy), radius)
+    for dx, dy, radius in ((-26, 8, 26), (-2, 16, 22), (-12, -14, 20)):
+        pygame.draw.circle(surface, darken(color, 0.4), (center[0] + dx, center[1] + dy), radius - 4)
+    for dx, dy, radius in ((28, -18, 6), (32, 24, 5), (-40, -30, 5)):
+        pygame.draw.circle(surface, darken(color, 0.35), (center[0] + dx, center[1] + dy), radius)
 
 
 def draw_tentacle(surface, tentacle, t):
@@ -3579,7 +3635,7 @@ def draw_tentacle(surface, tentacle, t):
 
 
 def draw_boss(boss, bacterium):
-    """Giant macrophage, its weak spot and tentacles, plus the HP pips above the fight."""
+    """Giant dendritic cell, its weak spot and tentacles, plus the HP pips above the fight."""
     t = now()
     draw_boss_body(screen, boss, t)
 
@@ -3596,7 +3652,7 @@ def draw_boss(boss, bacterium):
     for tentacle in boss["tentacles"]:
         draw_tentacle(screen, tentacle, t)
 
-    label = "GIANT MACROPHAGE" if boss["phase"] != "defeated" else "DEFEATED"
+    label = "GIANT DENDRITIC CELL" if boss["phase"] != "defeated" else "DEFEATED"
     blit_text(SMALL_FONT, label, RED, (WIDTH // 2, 134), anchor="midtop")
 
     pip_gap = 16
@@ -3678,7 +3734,6 @@ def try_purchase(progress, item, price):
 
 def main():
     progress = load_progress()
-    best_score = progress["stats"]["best_score"]
     pending_purchase = None
     code_input = ""
     code_focus = False
@@ -3706,6 +3761,7 @@ def main():
     running = True
     selected_character = CHARACTERS[0]
     difficulty = find_difficulty(progress["difficulty"])
+    best_score = best_for(progress, difficulty)
     game_over = False
     new_highscore = False
 
@@ -3769,6 +3825,7 @@ def main():
                         index = DIFFICULTIES.index(difficulty)
                         difficulty = DIFFICULTIES[(index + step) % len(DIFFICULTIES)]
                         progress["difficulty"] = difficulty["name"]
+                        best_score = best_for(progress, difficulty)
                         save_progress(progress)
                     elif menu_rects["grant_prev"].collidepoint(event.pos):
                         grant_stake_index = (grant_stake_index - 1) % len(GRANT_STAKES)
@@ -3934,7 +3991,7 @@ def main():
                     state = "menu"
 
         if state == "stats":
-            draw_stats_page(progress, best_score, stats_back_rect)
+            draw_stats_page(progress, stats_back_rect)
             pygame.display.flip()
             continue
 
@@ -3991,7 +4048,7 @@ def main():
                 hazards = []
                 bacterium.bind_module("ampicillin")
                 bacterium.infinite_ampicillin = True
-                run_banner = "GIANT MACROPHAGE! SPACE shoots Amp at its weak spots"
+                run_banner = "GIANT DENDRITIC CELL! SPACE shoots Amp at its weak spots"
                 run_banner_color = RED
                 run_banner_timer = 3.5
 
@@ -4157,7 +4214,7 @@ def main():
                     run_stats["coins"] += reward
                     progress["stats"]["bosses_defeated"] = progress["stats"].get("bosses_defeated", 0) + 1
                     save_progress(progress)
-                    run_banner = f"Macrophage defeated! +{reward} coins"
+                    run_banner = f"Dendritic cell defeated! +{reward} coins"
                     run_banner_color = GREEN
                     run_banner_timer = 3.0
                     next_boss_score += BOSS_SCORE_INTERVAL
@@ -4235,9 +4292,9 @@ def main():
                     game_over = True
 
             if game_over:
-                new_highscore = score > progress["stats"]["best_score"]
+                new_highscore = score > best_for(progress, difficulty)
                 run_stats["score"] = score
-                record_run(progress, selected_character, score, run_stats)
+                record_run(progress, selected_character, score, run_stats, difficulty)
                 completed = check_missions(progress, run_stats)
                 if completed:
                     reward = sum(mission["reward"] for mission in completed)
