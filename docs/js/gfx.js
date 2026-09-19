@@ -511,6 +511,10 @@ function lampRadius(bacterium) {
   return [LIGHT_BASE_RADIUS * flicker, DARKNESS_ALPHA];
 }
 
+// pow(u, 0.9) for u in 0..1 in 1024 steps: the lamp falloff, without a pow() per pixel.
+const LAMP_STEPS = 1024;
+const LAMP_FALLOFF = Float32Array.from({ length: LAMP_STEPS + 1 }, (_, step) => Math.pow(step / LAMP_STEPS, 0.9));
+
 function drawDarkness(bacterium, ceilingIntensity) {
   const [radius, baseAlpha] = lampRadius(bacterium);
   // Whichever light reaches a spot wins: the lamp above or your own.
@@ -526,12 +530,26 @@ function drawDarkness(bacterium, ceilingIntensity) {
   for (let y = 0; y < DARK_H; y++) {
     const dy = y - cy;
     const row = ceilingRows[y];
-    for (let x = 0; x < DARK_W; x++) {
+    // Outside the lamp's circle only the ceiling light counts, which is the same for the whole row.
+    const outside = Math.min(255 * Math.min(row, 1), baseAlpha);
+    let from = 0;
+    let to = -1;
+    if (dy * dy < halfSquared) {
+      const reach = Math.sqrt(halfSquared - dy * dy);
+      from = Math.max(0, Math.floor(cx - reach));
+      to = Math.min(DARK_W - 1, Math.ceil(cx + reach));
+    }
+    let offset = y * DARK_W * 4 + 3;
+    for (let x = 0; x < DARK_W; x++, offset += 4) {
+      if (x < from || x > to) {
+        data[offset] = outside;
+        continue;
+      }
       const dx = x - cx;
       const distanceSquared = dx * dx + dy * dy;
-      const lamp = distanceSquared >= halfSquared ? 1 : Math.pow(distanceSquared / halfSquared, 0.9);
+      const lamp = distanceSquared >= halfSquared ? 1 : LAMP_FALLOFF[Math.trunc((distanceSquared / halfSquared) * LAMP_STEPS)];
       const light = 255 * (row < lamp ? row : lamp);
-      data[(y * DARK_W + x) * 4 + 3] = light < baseAlpha ? light : baseAlpha;
+      data[offset] = light < baseAlpha ? light : baseAlpha;
     }
   }
   darkContext.putImageData(darkImage, 0, 0);
