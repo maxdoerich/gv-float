@@ -11,8 +11,6 @@ let difficulty = findDifficulty(progress.difficulty);
 let bestScore = bestFor(progress, difficulty);
 
 let pendingPurchase = null;
-let codeInput = '';
-let codeFocus = false;
 let menuNotice = '';
 let menuNoticeTimer = 0.0;
 
@@ -109,7 +107,6 @@ function continueTutorialCard() {
 /** A left click on the menu, the character screen or the shop. */
 function handleMenuClick(x, y) {
   let clicked = null;
-  codeFocus = state === 'menu' && menuRects.promo.contains(x, y);
   if (state !== 'menu') {
     if (menuRects.back.contains(x, y)) {
       state = 'menu';
@@ -204,19 +201,7 @@ function handleKeyDown(key) {
       state = 'menu';
     }
   } else if (state === 'menu') {
-    if (codeFocus) {
-      if (isEnter) {
-        menuNotice = redeemCode(progress, codeInput);
-        menuNoticeTimer = 2.2;
-        codeInput = '';
-      } else if (key === 'backspace') {
-        codeInput = codeInput.slice(0, -1);
-      } else if (key === 'escape') {
-        codeFocus = false;
-      }
-    } else if (isEnter) {
-      startRun();
-    }
+    if (isEnter) startRun();
   } else if (state === 'playing' && gameOver) {
     if (key === 'r' || isEnter) startRun();
     else if (key === 'e') state = 'menu';
@@ -228,17 +213,7 @@ window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) event.preventDefault();
   held.add(key);
-  if (state === 'menu' && codeFocus) {
-    // Typing into the promo field: letters and digits only, repeat allowed for backspace.
-    if (key === 'backspace') event.preventDefault();
-    if (event.key.length === 1 && /^[\p{L}\p{N}]$/u.test(event.key) && codeInput.length < MAX_CODE_LENGTH) {
-      codeInput += event.key;
-      return;
-    }
-    if (event.repeat && key !== 'backspace') return;
-  } else if (event.repeat) {
-    return;
-  }
+  if (event.repeat) return;
   handleKeyDown(key);
 });
 
@@ -265,11 +240,13 @@ canvas.addEventListener('pointerleave', () => {
   mouse.y = -1000;
 });
 
-// The page decides how big the game may be; the canvas just fills its stage
-// and renders at the screen's pixel density.
+// The page decides how big the game may be; the canvas just fills its stage.
+// It renders at the screen's pixel density, capped: on a 2x display the full density
+// is four times the pixels for little visible gain, and it is what makes weaker GPUs stutter.
+const MAX_RENDER_SCALE = 1.5;
 const stage = document.getElementById('stage');
 function resizeCanvas() {
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_SCALE);
   const cssWidth = Math.max(1, stage.clientWidth);
   const cssHeight = Math.max(1, Math.round((cssWidth * HEIGHT) / WIDTH));
   canvas.width = Math.round(cssWidth * ratio);
@@ -288,8 +265,6 @@ function menuState() {
     coins: progress.coins,
     bestScore,
     pending: pendingPurchase,
-    codeInput,
-    codeFocus,
     notice: menuNotice,
     noticeTimer: menuNoticeTimer,
     difficulty,
@@ -478,8 +453,12 @@ function playFrame(dt) {
         progress.coins += reward;
         runStats.coins += reward;
         progress.stats.bosses_defeated = (progress.stats.bosses_defeated || 0) + 1;
+        const zeppelinUnlocked = checkBossSkinUnlock(progress);
+        checkFinalSkinUnlock(progress);
         saveProgress(progress);
-        runBanner = `Dendritic cell defeated! +${reward} coins`;
+        runBanner = zeppelinUnlocked
+          ? `Dendritic cell defeated! +${reward} coins. Zeppelin unlocked!`
+          : `Dendritic cell defeated! +${reward} coins`;
         runBannerColor = GREEN;
         runBannerTimer = 3.0;
         nextBossScore += BOSS_SCORE_INTERVAL;
@@ -584,7 +563,18 @@ function playFrame(dt) {
   else if (tutorial && tutorial.card) drawTutorialCard(tutorial.card, tutorial.watch, tutorial.stage);
 }
 
+// The drifting bubbles and light rays around the game only run in the menus:
+// during a run they would compete with the canvas for every frame.
+let pageIdle = true;
+function syncPageAnimations() {
+  const idle = state !== 'playing';
+  if (idle === pageIdle) return;
+  pageIdle = idle;
+  document.body.classList.toggle('in-run', !idle);
+}
+
 function frame(dt) {
+  syncPageAnimations();
   if (state === 'stats') {
     drawStatsPage(progress, menuRects.back);
   } else if (state === 'menu' || state === 'characters' || state === 'shop') {

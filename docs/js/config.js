@@ -1,7 +1,7 @@
 'use strict';
 
 // GV Float, browser edition. This file holds the constants, the game data and
-// the pure game logic (progress, missions, promo codes). Drawing lives in gfx.js
+// the pure game logic (progress, missions, unlocks). Drawing lives in gfx.js
 // and screens.js, the entities in entities.js, the main loop in main.js.
 
 const WIDTH = 900;
@@ -185,8 +185,8 @@ function difficultyLines(difficulty) {
   ];
 }
 
-// Skins are bought with coins, except where a promo code or a special
-// unlock condition is the only way in.
+// Skins are bought with coins, except where a special unlock condition is
+// the only way in.
 const SKIN_PRICES = {
   'E. coli': 0,
   'HEK cell': 20,
@@ -197,7 +197,7 @@ const SKIN_PRICES = {
   'Salmonella': 65,
   'Purified GVs': 80,
   'BioBrick': null, // unlocked with iGEM special prizes, see BIOBRICK_TIER_THRESHOLDS
-  'Zeppelin': null, // grand prize: promo code only
+  'Zeppelin': null, // grand prize: defeat the giant dendritic cell once, see checkBossSkinUnlock
   [FINAL_SKIN]: null, // every other skin owned, every SpyCatcher maxed
 };
 
@@ -310,15 +310,6 @@ const TUTORIAL_CARDS = {
   ],
 };
 
-const PROMO_CODES = {
-  zeppelin: ['skin', 'Zeppelin'],
-  money: ['coins', 20],
-  heidelberg: ['special_prize', 1],
-};
-// These never get used up; everything else in PROMO_CODES is one-shot.
-const REPEATABLE_CODES = new Set();
-const MAX_CODE_LENGTH = 14;
-
 // iGEM special prizes: a rare, hard-to-reach pickup tucked against a gap's
 // edge. Finding enough of them unlocks BioBrick's medal tiers.
 const SPECIAL_PRIZE_CHANCE = 0.07;
@@ -412,7 +403,11 @@ const ORANGE = [245, 155, 55];
 const BLACK = [20, 20, 20];
 
 function lerpColor(a, b, t) {
-  return [0, 1, 2].map((i) => Math.trunc(a[i] + (b[i] - a[i]) * t));
+  return [
+    Math.trunc(a[0] + (b[0] - a[0]) * t),
+    Math.trunc(a[1] + (b[1] - a[1]) * t),
+    Math.trunc(a[2] + (b[2] - a[2]) * t),
+  ];
 }
 const lighten = (color, amount) => lerpColor(color, WHITE, amount);
 const darken = (color, amount) => lerpColor(color, [0, 0, 0], amount);
@@ -448,7 +443,6 @@ function loadProgress() {
   const progress = {
     coins: 0,
     owned: [],
-    codes_used: [],
     missions: [],
     stats: emptyStats(),
     tutorial_done: false,
@@ -498,13 +492,11 @@ function loadProgress() {
       // Saves from before per-difficulty bests: those runs were all Normal.
       progress.stats.best_by_difficulty = { [DEFAULT_DIFFICULTY]: progress.stats.best_score };
     }
-    progress.codes_used = (data.codes_used || [])
-      .filter((code) => code in PROMO_CODES)
-      .map((code) => String(code).toLowerCase());
     for (const key of UPGRADE_KEYS) progress[key] = clamp(toInt(data[key]), 0, UPGRADE_MAX_LEVEL);
   } catch (error) {
     // Unreadable or missing save: start fresh with whatever was parsed so far.
   }
+  checkBossSkinUnlock(progress); // saves from before the unlock existed
   return progress;
 }
 
@@ -535,6 +527,13 @@ function updateBiobrickTier(progress) {
   progress.biobrick_tier = tier;
   if (!progress.owned.includes('BioBrick')) progress.owned.push('BioBrick');
   return tier;
+}
+
+/** Defeating the giant dendritic cell once unlocks the Zeppelin. Returns true if this call granted it. */
+function checkBossSkinUnlock(progress) {
+  if (progress.owned.includes('Zeppelin') || !(progress.stats.bosses_defeated > 0)) return false;
+  progress.owned.push('Zeppelin');
+  return true;
 }
 
 /** Every other skin owned, every SpyCatcher maxed: unlocks the iGEM Legacy skin. */
@@ -599,32 +598,6 @@ function recordRun(progress, character, score, runStats, difficulty) {
   stats.skin_runs[character] = (stats.skin_runs[character] || 0) + 1;
 }
 
-function redeemCode(progress, typed) {
-  const code = typed.trim().toLowerCase();
-  if (!(code in PROMO_CODES)) return 'Unknown code';
-  if (!REPEATABLE_CODES.has(code) && progress.codes_used.includes(code)) return 'Code already used';
-
-  const [kind, value] = PROMO_CODES[code];
-  let message;
-  if (kind === 'skin') {
-    if (!progress.owned.includes(value)) progress.owned.push(value);
-    message = `${value} unlocked!`;
-  } else if (kind === 'special_prize') {
-    progress.special_prizes = (progress.special_prizes || 0) + value;
-    const newTier = updateBiobrickTier(progress);
-    message = `iGEM special prize! (${progress.special_prizes} found)`;
-    if (newTier) message = `BioBrick unlocked: ${BIOBRICK_TIER_NAMES[newTier]}!`;
-  } else {
-    progress.coins += value;
-    message = `+${value} coins`;
-  }
-
-  if (!REPEATABLE_CODES.has(code)) progress.codes_used.push(code);
-  checkFinalSkinUnlock(progress);
-  saveProgress(progress);
-  return message;
-}
-
 const upgradePrice = (level) => (level < UPGRADE_MAX_LEVEL ? UPGRADE_PRICES[level] : null);
 
 /** BioBrick's perk text scales with its unlocked medal tier; everyone else is static. */
@@ -642,7 +615,7 @@ function lockedSkinReason(character, progress) {
     return `${progress.special_prizes || 0}/${BIOBRICK_TIER_THRESHOLDS[1]} special prizes`;
   }
   if (character === FINAL_SKIN) return 'every skin + max SpyCatchers';
-  return 'promo code only';
+  return 'defeat the boss once';
 }
 
 /** Short enough to sit on the button itself without crowding the name. */
@@ -651,7 +624,7 @@ function lockedSkinBadge(character, progress) {
     return `${progress.special_prizes || 0}/${BIOBRICK_TIER_THRESHOLDS[1]} prizes`;
   }
   if (character === FINAL_SKIN) return 'special';
-  return 'promo only';
+  return 'boss reward';
 }
 
 /** Returns [level, speed, gap, spacing]. */

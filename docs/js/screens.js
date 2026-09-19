@@ -355,19 +355,6 @@ function drawUpgradeButton(rect, kind, level, coins, pending) {
   drawText(SMALL_FONT, label, labelColor, rect.right - 12, rect.bottom - 4, 'bottomright', false, affordable || price === null || pending ? 255 : 140);
 }
 
-function drawPromoField(rect, text, focused, blink) {
-  drawPanel(rect, focused ? 215 : 175, focused ? YELLOW : PANEL_BORDER, focused ? 230 : 80, 10);
-  drawText(SMALL_FONT, 'PROMO CODE', PANEL_BORDER, rect.centerx, rect.y - 20, 'midtop', false);
-  if (text) {
-    drawText(FONT, text + (focused && blink ? '_' : ''), WHITE, rect.x + 14, rect.centery, 'midleft', false);
-  } else {
-    drawText(
-      SMALL_FONT, !focused ? 'click, type, ENTER' : 'type a code' + (blink ? '_' : ''), GRAY,
-      rect.x + 14, rect.centery, 'midleft', false, 150,
-    );
-  }
-}
-
 function drawMissionsPanel(rect, missions) {
   drawPanel(rect, 175, PANEL_BORDER, 80, 10);
   drawText(SMALL_FONT, 'MISSIONS', PANEL_BORDER, rect.centerx, rect.y - 20, 'midtop', false);
@@ -462,7 +449,6 @@ function menuLayout() {
     diffPrev: new Rect(diffPanel.x + 14, diffPanel.y + 40, 30, 30),
     diffNext: new Rect(diffPanel.right - 44, diffPanel.y + 40, 30, 30),
     start: new Rect(WIDTH / 2 - 150, 452, 300, 56),
-    promo: new Rect(618, 460, 232, 40),
     missions: new Rect(50, 460, 232, 62),
     stats: new Rect(15, 54, 170, 30),
     back: new Rect(WIDTH / 2 - 90, HEIGHT - 70, 180, 44),
@@ -512,8 +498,6 @@ function drawMenu(menu, rects) {
   drawShopButton(rects.shop, menu.progress);
   drawCharacterShowcase(rects.showcase, menu.character, menu.progress, rects.change);
   drawDifficultyPanel(rects.difficulty, menu.difficulty, menu.bestScore, rects.diffPrev, rects.diffNext);
-
-  drawPromoField(rects.promo, menu.codeInput, menu.codeFocus, Math.trunc(now() * 2) % 2 === 0);
 
   const startRect = rects.start;
   const over = mouseOver(startRect);

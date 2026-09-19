@@ -46,10 +46,24 @@ const mouseOver = (rect) => rect.contains(mouse.x, mouse.y);
 
 // ------------------------------------------------------------------- colours
 
-/** CSS colour for [r, g, b] or [r, g, b, a(0-255)], times an extra 0-1 alpha. */
+const CSS_CACHE = new Map();
+const CSS_CACHE_LIMIT = 4096;
+const byte = (value) => (value < 0 ? 0 : value > 255 ? 255 : Math.round(value));
+
+/**
+ * CSS colour for [r, g, b] or [r, g, b, a(0-255)], times an extra 0-1 alpha.
+ * Called for nearly every shape every frame, so the strings are cached (alpha in 1/255 steps).
+ */
 function css(color, alpha = 1) {
-  const a = (color.length > 3 ? color[3] / 255 : 1) * alpha;
-  return `rgba(${color[0]},${color[1]},${color[2]},${a})`;
+  const a = byte((color.length > 3 ? color[3] : 255) * alpha);
+  const key = ((byte(color[0]) * 256 + byte(color[1])) * 256 + byte(color[2])) * 256 + a;
+  let value = CSS_CACHE.get(key);
+  if (value === undefined) {
+    if (CSS_CACHE.size >= CSS_CACHE_LIMIT) CSS_CACHE.clear();
+    value = `rgba(${byte(color[0])},${byte(color[1])},${byte(color[2])},${a / 255})`;
+    CSS_CACHE.set(key, value);
+  }
+  return value;
 }
 
 // -------------------------------------------------------------------- shapes
@@ -176,18 +190,36 @@ function drawArc(cx, cy, rx, ry, start, end, color, width = 1, alpha = 1) {
   ctx.stroke();
 }
 
+const GLOW_SPRITE_SIZE = 256;
+const glowSprites = new Map();
+
+/** One pre-rendered glow per colour and falloff; drawing it scaled is far cheaper than a fresh gradient. */
+function glowSprite(color, power) {
+  const key = `${color[0]},${color[1]},${color[2]},${color[3] ?? 255},${power}`;
+  let sprite = glowSprites.get(key);
+  if (!sprite) {
+    sprite = makeCanvas(GLOW_SPRITE_SIZE, GLOW_SPRITE_SIZE);
+    const g = sprite.getContext('2d');
+    const half = GLOW_SPRITE_SIZE / 2;
+    const gradient = g.createRadialGradient(half, half, 0, half, half, half);
+    for (let step = 0; step <= 10; step++) {
+      const t = step / 10;
+      gradient.addColorStop(t, css(color, Math.pow(1 - t, power)));
+    }
+    g.fillStyle = gradient;
+    g.fillRect(0, 0, GLOW_SPRITE_SIZE, GLOW_SPRITE_SIZE);
+    glowSprites.set(key, sprite);
+  }
+  return sprite;
+}
+
 /** Soft radial blob: brightest in the middle, fading with (1 - r)^power. */
 function glow(cx, cy, radius, color, maxAlpha, power = 1.5) {
   if (radius <= 0) return;
-  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  for (let step = 0; step <= 10; step++) {
-    const t = step / 10;
-    gradient.addColorStop(t, css(color, (maxAlpha / 255) * Math.pow(1 - t, power)));
-  }
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, TAU);
-  ctx.fill();
+  const previousAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = previousAlpha * Math.min(1, maxAlpha / 255);
+  ctx.drawImage(glowSprite(color, power), cx - radius, cy - radius, radius * 2, radius * 2);
+  ctx.globalAlpha = previousAlpha;
 }
 
 // --------------------------------------------------------------------- text
@@ -201,7 +233,15 @@ const TITLE_FONT = { size: 72, bold: true };
 const GAUGE_FONT = { size: 11, bold: true };
 const TINY_FONT = { size: 13, bold: false };
 
-const fontString = (font) => `${font.bold ? 'bold ' : ''}${font.size}px ${FAMILY}`;
+const fontStrings = new WeakMap();
+function fontString(font) {
+  let value = fontStrings.get(font);
+  if (value === undefined) {
+    value = `${font.bold ? 'bold ' : ''}${font.size}px ${FAMILY}`;
+    fontStrings.set(font, value);
+  }
+  return value;
+}
 
 const fontMetricsCache = new Map();
 function fontMetrics(font) {
@@ -218,9 +258,21 @@ function fontMetrics(font) {
   return metrics;
 }
 
+const textWidthCache = new Map();
+const TEXT_WIDTH_CACHE_LIMIT = 800;
+
+/** measureText is slow and the same labels are measured every frame, so remember the widths. */
 function textWidth(font, text) {
-  ctx.font = fontString(font);
-  return ctx.measureText(text).width;
+  const fontKey = fontString(font);
+  const key = `${fontKey}|${text}`;
+  let width = textWidthCache.get(key);
+  if (width === undefined) {
+    ctx.font = fontKey;
+    width = ctx.measureText(text).width;
+    if (textWidthCache.size >= TEXT_WIDTH_CACHE_LIMIT) textWidthCache.clear();
+    textWidthCache.set(key, width);
+  }
+  return width;
 }
 
 const ANCHORS = {
@@ -235,11 +287,11 @@ const ANCHORS = {
   bottomright: ['right', 'bottom'],
 };
 
-/** Text placed by a pygame-style anchor. Returns the rectangle it covers. */
+/** Text placed by a pygame-style anchor. Use textRect() to get the rectangle it covers. */
 function drawText(font, text, color, x, y, anchor = 'topleft', shadow = true, alpha = 255) {
   const metrics = fontMetrics(font);
+  const width = textWidth(font, text);
   ctx.font = fontString(font);
-  const width = ctx.measureText(text).width;
   const [horizontal, vertical] = ANCHORS[anchor];
   const top = vertical === 'top' ? y : vertical === 'mid' ? y - metrics.height / 2 : y - metrics.height;
   const left = horizontal === 'left' ? x : horizontal === 'center' ? x - width / 2 : x - width;
@@ -252,7 +304,6 @@ function drawText(font, text, color, x, y, anchor = 'topleft', shadow = true, al
   }
   ctx.fillStyle = css(color, alpha / 255);
   ctx.fillText(text, left, baseline);
-  return new Rect(left, top, width, metrics.height);
 }
 
 /** The rectangle text would cover, without drawing it (for sizing panels around it). */
@@ -361,6 +412,16 @@ const PARTICLES = (() => {
   ]);
 })();
 const DEPTH_MARKS = [100, 200, 300, 400, 500];
+const DEPTH_LINE_COLORS = BIOMES.map((biome) => DEPTH_MARKS.map((depth) => lighten(biomeColorAt(biome, depth), 0.08)));
+const SURFACE_FILL_COLORS = BIOMES.map((biome) => lighten(biome.top, 0.35));
+const SURFACE_LINE_COLORS = BIOMES.map((biome) => lighten(biome.top, 0.65));
+const SAND_FILL_COLOR = darken(SAND_COLOR, 0.35);
+const SAND_LINE_COLOR = darken(SAND_COLOR, 0.1);
+const SAND_POINTS = [];
+for (let x = 0; x < WIDTH + 20; x += 15) {
+  SAND_POINTS.push([x, HEIGHT - 10 + Math.sin(x * 0.021) * 4 + Math.sin(x * 0.057 + 1) * 2]);
+}
+const SAND_POLY = [[0, HEIGHT], ...SAND_POINTS, [WIDTH, HEIGHT]];
 
 function drawWaterBackground(ceilingIntensity = 1.0, biome = 0, previous = null, blend = 1.0) {
   const t = now();
@@ -376,9 +437,9 @@ function drawWaterBackground(ceilingIntensity = 1.0, biome = 0, previous = null,
   ctx.drawImage(LIGHT_RAYS, -120 + Math.sin(t * 0.25) * 90, 0);
   ctx.globalAlpha = 1;
 
-  for (const depth of DEPTH_MARKS) {
-    const lineColor = lighten(biomeColorAt(BIOMES[biome], depth), 0.08);
-    ctx.fillStyle = css(lineColor);
+  for (let mark = 0; mark < DEPTH_MARKS.length; mark++) {
+    const depth = DEPTH_MARKS[mark];
+    ctx.fillStyle = css(DEPTH_LINE_COLORS[biome][mark]);
     for (let dashX = 0; dashX < WIDTH; dashX += 24) ctx.fillRect(dashX, depth, 12, 1);
     drawText(SMALL_FONT, `${depth} m`, [170, 220, 235], 10, depth + 4, 'topleft', false, 90);
   }
@@ -391,18 +452,13 @@ function drawWaterBackground(ceilingIntensity = 1.0, biome = 0, previous = null,
     fillCircle(px + radius + 1, py + radius + 1, radius, [210, 240, 255], (40 + radius * 25) / 255);
   }
 
-  const topColor = BIOMES[biome].top;
   const surfacePoints = [];
   for (let x = 0; x < WIDTH + 20; x += 20) surfacePoints.push([x, 4 + Math.sin(x * 0.03 + t * 2.0) * 2.5]);
-  fillPoly([[0, 0], ...surfacePoints, [WIDTH, 0]], lighten(topColor, 0.35));
-  drawPolyline(surfacePoints, lighten(topColor, 0.65), 2);
+  fillPoly([[0, 0], ...surfacePoints, [WIDTH, 0]], SURFACE_FILL_COLORS[biome]);
+  drawPolyline(surfacePoints, SURFACE_LINE_COLORS[biome], 2);
 
-  const sandPoints = [];
-  for (let x = 0; x < WIDTH + 20; x += 15) {
-    sandPoints.push([x, HEIGHT - 10 + Math.sin(x * 0.021) * 4 + Math.sin(x * 0.057 + 1) * 2]);
-  }
-  fillPoly([[0, HEIGHT], ...sandPoints, [WIDTH, HEIGHT]], darken(SAND_COLOR, 0.35));
-  drawPolyline(sandPoints, darken(SAND_COLOR, 0.1), 2);
+  fillPoly(SAND_POLY, SAND_FILL_COLOR);
+  drawPolyline(SAND_POINTS, SAND_LINE_COLOR, 2);
 }
 
 function drawVignette() {

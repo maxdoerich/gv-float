@@ -119,11 +119,10 @@ header, main, footer { position: relative; z-index: 1; width: 100%; }
   font-size: 14px;
   color: var(--text);
   padding: 9px 14px;
-  background: rgba(8, 32, 52, .7);
+  background: rgba(8, 32, 52, .8);
   border: 2px solid rgba(117, 201, 225, .45);
   border-radius: 12px;
   cursor: pointer;
-  backdrop-filter: blur(6px);
   transition: border-color .15s, background .15s, transform .15s;
 }
 .btn svg { width: 16px; height: 16px; }
@@ -197,10 +196,9 @@ canvas {
   justify-content: center;
   gap: 10px 26px;
   padding: 12px 22px;
-  background: rgba(8, 32, 52, .62);
+  background: rgba(8, 32, 52, .78);
   border: 1px solid rgba(117, 201, 225, .3);
   border-radius: 16px;
-  backdrop-filter: blur(6px);
 }
 
 .key-group {
@@ -247,10 +245,9 @@ kbd.wide { min-width: 76px; }
 
 .card {
   padding: 18px 20px 20px;
-  background: rgba(8, 32, 52, .7);
+  background: rgba(8, 32, 52, .8);
   border: 1px solid rgba(117, 201, 225, .3);
   border-radius: 16px;
-  backdrop-filter: blur(6px);
 }
 .card h2 {
   display: flex;
@@ -296,6 +293,10 @@ footer {
   .touch-note { display: block; }
   #fullscreen { display: none; }
 }
+
+/* During a run the page behind the canvas stands still (see syncPageAnimations in main.js). */
+body.in-run .rays,
+body.in-run .bubble { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
   .rays { animation: none; }
