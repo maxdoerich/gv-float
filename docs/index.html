@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#061c34">
+  <meta name="description" content="GV Float: stay afloat by growing and collapsing gas vesicles. A small browser game.">
+  <title>GV Float</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23082034'/%3E%3Crect x='11' y='5' width='10' height='22' rx='5' fill='%23ebf5fa' stroke='%2375c9e1' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sea" aria-hidden="true"><div class="rays"></div><div id="bubbles"></div></div>
+
+  <header class="top">
+    <a class="brand" href="./" aria-label="GV Float">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="11" fill="#082034" stroke="#75c9e1" stroke-opacity=".55" stroke-width="2"/>
+        <rect x="14" y="7" width="12" height="26" rx="6" fill="#ebf5fa" stroke="#96b9c8" stroke-width="1.5"/>
+        <path d="M16 15h8M16 20h8M16 25h8" stroke="#96b9c8" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="word">GV <b>FLOAT</b></span>
+    </a>
+    <p class="tagline">Grow gas vesicles. Rise. Sink. Survive.</p>
+    <button id="fullscreen" class="btn" type="button" aria-label="Toggle fullscreen">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Fullscreen</span>
+    </button>
+  </header>
+
+  <main>
+    <section id="play" class="play" aria-label="Game">
+      <div id="stage" class="stage">
+        <canvas id="game" width="900" height="600" aria-label="GV Float"></canvas>
+        <noscript><p class="nojs">GV Float needs JavaScript to run.</p></noscript>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Controls">
+      <div class="key-group"><kbd>W</kbd><kbd>↑</kbd><span>Produce GVs, rise</span></div>
+      <div class="key-group"><kbd>S</kbd><kbd>↓</kbd><span>Collapse GVs, sink</span></div>
+      <div class="key-group"><kbd class="wide">Space</kbd><span>Fire Ampicillin</span></div>
+      <div class="key-group"><kbd>P</kbd><kbd>Esc</kbd><span>Pause</span></div>
+    </section>
+    <p class="touch-note">This game needs a keyboard: hold W and S to steer.</p>
+
+    <section class="cards" aria-label="How to play">
+      <article class="card">
+        <h2><span class="dot blue"></span>Stay afloat</h2>
+        <p>Gas vesicles are the gas-filled protein bubbles some microbes use to float. Build them to rise, collapse them to sink, and thread the gaps between the pillars. Around 50% you hover.</p>
+      </article>
+      <article class="card">
+        <h2><span class="dot gold"></span>Collect &amp; upgrade</h2>
+        <p>Grab coins, GvpC to shield one hit, and SpyCatcher modules: GFP lights the dark, Antibody pulls in pickups, Granzyme kills cells, Ampicillin fires. Spend coins on skins and upgrades.</p>
+      </article>
+      <article class="card">
+        <h2><span class="dot red"></span>Watch out</h2>
+        <p>Macrophages and ciliates swim at you, ultrasound transducers collapse or push you around, and every 50 points a giant dendritic cell docks. Shoot its weak spots.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>GV Float</span>
+    <span class="sep">·</span>
+    <span>Progress is saved in this browser</span>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/gfx.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/screens.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/page.js"></script>
+</body>
+</html>
