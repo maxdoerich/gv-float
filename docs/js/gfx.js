@@ -224,7 +224,7 @@ function glow(cx, cy, radius, color, maxAlpha, power = 1.5) {
 
 // --------------------------------------------------------------------- text
 
-const FAMILY = '"Avenir Next", "Helvetica Neue", Arial, sans-serif';
+const FAMILY = '"Nunito Sans", "Avenir Next", "Helvetica Neue", Arial, sans-serif';
 const FONT = { size: 22, bold: false };
 const SMALL_FONT = { size: 16, bold: false };
 const MEDIUM_FONT = { size: 30, bold: true };
@@ -237,7 +237,7 @@ const fontStrings = new WeakMap();
 function fontString(font) {
   let value = fontStrings.get(font);
   if (value === undefined) {
-    value = `${font.bold ? 'bold ' : ''}${font.size}px ${FAMILY}`;
+    value = `${font.bold ? 900 : 600} ${font.size}px ${FAMILY}`;
     fontStrings.set(font, value);
   }
   return value;
@@ -299,11 +299,18 @@ function drawText(font, text, color, x, y, anchor = 'topleft', shadow = true, al
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   if (shadow) {
-    ctx.fillStyle = css([0, 12, 25], (150 / 255) * (alpha / 255));
+    ctx.fillStyle = css([16, 50, 52], (150 / 255) * (alpha / 255));
     ctx.fillText(text, left + 2, baseline + 2);
   }
   ctx.fillStyle = css(color, alpha / 255);
   ctx.fillText(text, left, baseline);
+}
+
+/** Page-title style from the VOYAGE wiki: Cayenne face over a hard Peach offset. */
+function drawTitle(font, text, x, y, anchor = 'midtop', alpha = 255) {
+  const offset = Math.max(2, Math.round(font.size * 0.055));
+  drawText(font, text, TITLE_SHADOW, x + offset, y + offset, anchor, false, alpha);
+  drawText(font, text, TITLE_COLOR, x, y, anchor, false, alpha);
 }
 
 /** The rectangle text would cover, without drawing it (for sizing panels around it). */
@@ -320,7 +327,6 @@ function textRect(font, text, anchor, x, y) {
 
 function drawPanel(rect, alpha = 185, border = PANEL_BORDER, borderAlpha = 120, radius = 12) {
   fillRect(rect.x, rect.y, rect.w, rect.h, PANEL, radius, alpha / 255);
-  drawLine(rect.x + radius, rect.y + 2.5, rect.right - radius, rect.y + 2.5, WHITE, 1, 30 / 255);
   ringRect(rect.x, rect.y, rect.w, rect.h, border, 2, radius, borderAlpha / 255);
 }
 
@@ -358,9 +364,9 @@ function makeVignette() {
       const distance = Math.min(1.0, Math.hypot(dx, dy));
       const alpha = Math.trunc(150 * Math.pow(Math.max(0, distance - 0.45) / 0.55, 2));
       const offset = (y * 90 + x) * 4;
-      image.data[offset] = 0;
-      image.data[offset + 1] = 8;
-      image.data[offset + 2] = 20;
+      image.data[offset] = 10;
+      image.data[offset + 1] = 40;
+      image.data[offset + 2] = 42;
       image.data[offset + 3] = alpha;
     }
   }
@@ -461,6 +467,26 @@ function drawWaterBackground(ceilingIntensity = 1.0, biome = 0, previous = null,
   drawPolyline(SAND_POINTS, SAND_LINE_COLOR, 2);
 }
 
+/** Menu backdrop in the look of the VOYAGE illustrations: Light Cyan fading to Frosted Blue. */
+function makeMenuBackdrop() {
+  const surface = makeCanvas(WIDTH, HEIGHT);
+  const g = surface.getContext('2d');
+  const gradient = g.createRadialGradient(WIDTH / 2, -HEIGHT * 0.25, 0, WIDTH / 2, -HEIGHT * 0.25, HEIGHT * 1.45);
+  gradient.addColorStop(0, css(LIGHT_CYAN));
+  gradient.addColorStop(1, css(PANEL_BORDER));
+  g.fillStyle = gradient;
+  g.fillRect(0, 0, WIDTH, HEIGHT);
+  return surface;
+}
+const MENU_BACKDROP = makeMenuBackdrop();
+
+function drawMenuBackdrop() {
+  ctx.drawImage(MENU_BACKDROP, 0, 0);
+  ctx.globalAlpha = 0.6;
+  ctx.drawImage(LIGHT_RAYS, -120 + Math.sin(now() * 0.25) * 90, 0);
+  ctx.globalAlpha = 1;
+}
+
 function drawVignette() {
   ctx.drawImage(VIGNETTE, 0, 0, WIDTH, HEIGHT);
 }
@@ -474,9 +500,9 @@ const darkCanvas = makeCanvas(DARK_W, DARK_H);
 const darkContext = darkCanvas.getContext('2d');
 const darkImage = darkContext.createImageData(DARK_W, DARK_H);
 for (let offset = 0; offset < darkImage.data.length; offset += 4) {
-  darkImage.data[offset] = 0;
-  darkImage.data[offset + 1] = 6;
-  darkImage.data[offset + 2] = 18;
+  darkImage.data[offset] = 30;
+  darkImage.data[offset + 1] = 72;
+  darkImage.data[offset + 2] = 72;
 }
 const ceilingRows = new Float32Array(DARK_H);
 

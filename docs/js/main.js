@@ -563,7 +563,7 @@ function playFrame(dt) {
   else if (tutorial && tutorial.card) drawTutorialCard(tutorial.card, tutorial.watch, tutorial.stage);
 }
 
-// The drifting bubbles and light rays around the game only run in the menus:
+// The drifting bubbles around the game only run in the menus:
 // during a run they would compete with the canvas for every frame.
 let pageIdle = true;
 function syncPageAnimations() {
@@ -598,3 +598,15 @@ function loop(timestamp) {
   frame(dt);
 }
 requestAnimationFrame(loop);
+
+// The canvas only picks up Nunito Sans once it has loaded; measured widths and
+// the cached VOYAGE banner were taken with the fallback font, so redo them.
+if (document.fonts) {
+  Promise.all([600, 900].map((weight) => document.fonts.load(`${weight} 16px "Nunito Sans"`)))
+    .then(() => {
+      textWidthCache.clear();
+      fontMetricsCache.clear();
+      zeppelinBanner = null;
+    })
+    .catch(() => {});
+}

@@ -40,9 +40,9 @@ function drawBackButton(rect) {
 
 function drawMenuNotice(menu, x, y, idleText = null) {
   if (menu.noticeTimer > 0) {
-    drawText(SMALL_FONT, menu.notice, YELLOW, x, y, 'midtop', false, 255 * Math.min(1.0, menu.noticeTimer / 0.4));
+    drawText(SMALL_FONT, menu.notice, TITLE_COLOR, x, y, 'midtop', false, 255 * Math.min(1.0, menu.noticeTimer / 0.4));
   } else if (idleText) {
-    drawText(SMALL_FONT, idleText, GRAY, x, y, 'midtop', false);
+    drawText(SMALL_FONT, idleText, PANEL, x, y, 'midtop', false);
   }
 }
 
@@ -73,7 +73,7 @@ function drawModuleStatus(bacterium, area) {
   const label = isAmpicillin ? `x${bacterium.ammo}` : `${bacterium.moduleTimer.toFixed(0)}s`;
   drawText(SMALL_FONT, label, WHITE, area.right, area.y, 'topright', false);
   const bar = new Rect(area.x + 24, area.bottom - 3, area.right - area.x - 24, 4);
-  fillRect(bar.x, bar.y, bar.w, bar.h, [4, 16, 28], 2);
+  fillRect(bar.x, bar.y, bar.w, bar.h, darken(PANEL, 0.5), 2);
   let fraction;
   if (isAmpicillin && bacterium.ampicillinCapacity) fraction = bacterium.ammo / bacterium.ampicillinCapacity;
   else fraction = bacterium.moduleDuration ? bacterium.moduleTimer / bacterium.moduleDuration : 0;
@@ -92,23 +92,21 @@ function drawHud(bacterium, score, levelText, biomeName, bestScore, coins) {
   for (let layer = 0; layer < MAX_SHELL_LAYERS; layer++) {
     const filled = layer < bacterium.shell;
     const px = 76 + layer * 28;
-    fillRect(px, 50, 24, 12, filled ? SHELL_COLOR : [26, 52, 68], 6);
-    ringRect(px, 50, 24, 12, filled ? lighten(SHELL_COLOR, 0.4) : [58, 88, 104], 1, 6);
+    fillRect(px, 50, 24, 12, filled ? SHELL_COLOR : darken(PANEL, 0.3), 6);
+    ringRect(px, 50, 24, 12, filled ? lighten(SHELL_COLOR, 0.4) : lighten(PANEL, 0.2), 1, 6);
   }
 
   const dividerX = 76 + MAX_SHELL_LAYERS * 28 + 6;
-  fillRect(dividerX, 46, 1, 24, [58, 88, 104]);
+  fillRect(dividerX, 46, 1, 24, lighten(PANEL, 0.2));
   drawModuleStatus(bacterium, new Rect(dividerX + 10, 46, gvPanel.right - 18 - dividerX - 10, 28));
 
   const bar = new Rect(30, 82, 250, 26);
-  fillRect(bar.x, bar.y, bar.w, bar.h, [4, 16, 28], 13);
+  fillRect(bar.x, bar.y, bar.w, bar.h, darken(PANEL, 0.5), 13);
   const fillWidth = Math.trunc((bar.w * bacterium.gvLevel) / 100.0);
   if (fillWidth > 0) {
     const color = gvBarColor(bacterium.gvLevel);
     const width = Math.min(Math.max(fillWidth, 14), bar.w);
-    fillRect(bar.x, bar.y, width, bar.h, darken(color, 0.2), 13);
-    fillRect(bar.x, bar.y, width, bar.h - 8, color, 13);
-    fillRect(bar.x + 8, bar.y + 4, Math.max(0, width - 16), 4, lighten(color, 0.45), 2);
+    fillRect(bar.x, bar.y, width, bar.h, color, 13);
   }
   const neutralX = bar.x + Math.floor(bar.w / 2);
   drawLine(neutralX, bar.y - 4, neutralX, bar.bottom + 4, WHITE, 2);
@@ -116,9 +114,10 @@ function drawHud(bacterium, score, levelText, biomeName, bestScore, coins) {
   drawText(SMALL_FONT, 'sink', GRAY, bar.x + 4, bar.bottom + 2, 'topleft', false, 170);
   drawText(SMALL_FONT, 'float', GRAY, bar.right - 4, bar.bottom + 2, 'topright', false, 170);
 
-  drawText(SMALL_FONT, 'SCORE', PANEL_BORDER, WIDTH / 2, 12, 'midtop');
-  drawText(BIG_FONT, String(score), WHITE, WIDTH / 2, 28, 'midtop');
-  drawText(SMALL_FONT, `BEST ${bestScore}`, GRAY, WIDTH / 2, 74, 'midtop', false);
+  drawPanel(new Rect(WIDTH / 2 - 75, 6, 150, 88), 170, PANEL_BORDER, 80, 14);
+  drawText(SMALL_FONT, 'SCORE', PANEL_BORDER, WIDTH / 2, 10, 'midtop', false);
+  drawText(BIG_FONT, String(score), WHITE, WIDTH / 2, 24, 'midtop');
+  drawText(SMALL_FONT, `BEST ${bestScore}`, GRAY, WIDTH / 2, 70, 'midtop', false);
 
   const info = `${levelText}   ·   ${biomeName}`;
   const infoBox = textRect(SMALL_FONT, info, 'midtop', WIDTH / 2, 100).inflate(26, 8);
@@ -157,8 +156,8 @@ function drawRunMissionsPanel(rect, missions, runStats, score) {
     drawText(TINY_FONT, mission.text, done ? GREEN : WHITE, rect.x + 10, rowY, 'topleft', false, 225);
     drawText(TINY_FONT, `+${mission.reward}`, done ? GREEN : YELLOW, rect.right - 10, rowY, 'topright', false);
 
-    const bar = new Rect(rect.x + 10, Math.trunc(rowY + 13), rect.w - 56, 4);
-    fillRect(bar.x, bar.y, bar.w, bar.h, [4, 16, 28], 2);
+    const bar = new Rect(rect.x + 10, Math.trunc(rowY + 16), rect.w - 56, 4);
+    fillRect(bar.x, bar.y, bar.w, bar.h, darken(PANEL, 0.5), 2);
     const fillWidth = Math.trunc(bar.w * fraction);
     if (fillWidth > 0) fillRect(bar.x, bar.y, fillWidth, bar.h, done ? GREEN : YELLOW, 2);
     drawText(GAUGE_FONT, `${current}/${mission.target}`, done ? GREEN : GRAY, bar.right + 6, bar.y - 2, 'topleft', false);
@@ -166,7 +165,7 @@ function drawRunMissionsPanel(rect, missions, runStats, score) {
 }
 
 function drawPauseOverlay() {
-  fillRect(0, 0, WIDTH, HEIGHT, [0, 10, 20], 0, 150 / 255);
+  fillRect(0, 0, WIDTH, HEIGHT, [10, 40, 42], 0, 150 / 255);
   const card = new Rect(WIDTH / 2 - 200, 230, 400, 150);
   drawPanel(card, 225, PANEL_BORDER, 200, 18);
   drawText(BIG_FONT, 'PAUSED', WHITE, WIDTH / 2, 252, 'midtop');
@@ -174,8 +173,8 @@ function drawPauseOverlay() {
 }
 
 function drawGameOver(score, newHighscore, missionNotice = '') {
-  fillRect(0, 0, WIDTH, HEIGHT, [0, 10, 20], 0, 150 / 255);
-  const card = new Rect(WIDTH / 2 - 270, 180, 540, 260);
+  fillRect(0, 0, WIDTH, HEIGHT, [10, 40, 42], 0, 150 / 255);
+  const card = new Rect(WIDTH / 2 - 310, 180, 620, 260);
   drawPanel(card, 225, newHighscore ? YELLOW : RED, 200, 18);
 
   if (newHighscore) drawText(BIG_FONT, 'NEW PERSONAL BEST!', YELLOW, WIDTH / 2, 210, 'midtop');
@@ -198,15 +197,14 @@ function drawTutorialHint(remaining) {
 }
 
 function drawTutorialProgress(stage) {
-  drawText(
-    SMALL_FONT, `Tutorial  ·  ${stage}/${TUTORIAL_FEATURES.length} explained`, PANEL_BORDER,
-    WIDTH / 2, 128, 'midtop', false, 200,
-  );
+  const text = `Tutorial  ·  ${stage}/${TUTORIAL_FEATURES.length} explained`;
+  drawPanel(textRect(SMALL_FONT, text, 'midtop', WIDTH / 2, 130).inflate(22, 6), 150, PANEL_BORDER, 70, 12);
+  drawText(SMALL_FONT, text, WHITE, WIDTH / 2, 130, 'midtop', false);
 }
 
 function drawTutorialCard(feature, watch, stage) {
   const t = now();
-  fillRect(0, 0, WIDTH, HEIGHT, [0, 10, 20], 0, 120 / 255);
+  fillRect(0, 0, WIDTH, HEIGHT, [10, 40, 42], 0, 120 / 255);
 
   // Spotlight the thing that is being explained.
   watch.draw();
@@ -344,7 +342,7 @@ function drawUpgradeButton(rect, kind, level, coins, pending) {
   drawText(SMALL_FONT, effect, WHITE, rect.x + 38, rect.bottom - 4, 'bottomleft', false, 200);
 
   for (let step = 0; step < UPGRADE_MAX_LEVEL; step++) {
-    fillRect(rect.right - 8 - (UPGRADE_MAX_LEVEL - step) * 9, rect.y + 8, 6, 8, step < level ? color : [30, 58, 74], 1);
+    fillRect(rect.right - 8 - (UPGRADE_MAX_LEVEL - step) * 9, rect.y + 8, 6, 8, step < level ? color : darken(PANEL, 0.3), 1);
   }
 
   let label;
@@ -357,7 +355,7 @@ function drawUpgradeButton(rect, kind, level, coins, pending) {
 
 function drawMissionsPanel(rect, missions) {
   drawPanel(rect, 175, PANEL_BORDER, 80, 10);
-  drawText(SMALL_FONT, 'MISSIONS', PANEL_BORDER, rect.centerx, rect.y - 20, 'midtop', false);
+  drawText(SMALL_FONT, 'MISSIONS', PANEL, rect.centerx, rect.y - 20, 'midtop', false);
   missions.slice(0, ACTIVE_MISSIONS).forEach((mission, index) => {
     const rowY = rect.y + 6 + index * 18;
     drawText(SMALL_FONT, mission.text, WHITE, rect.x + 10, rowY, 'topleft', false, 215);
@@ -375,7 +373,7 @@ function drawCharacterShowcase(rect, character, progress, changeRect) {
   preview.gvLevel = 67.0;
   const cx = rect.centerx;
   const cy = rect.y + 102 + Math.sin(t * 2.2) * 5;
-  glow(cx, cy, 140, [170, 230, 255], 55, 1.6);
+  glow(cx, cy, 140, [138, 212, 220], 55, 1.6);
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(3.6, 3.6);
@@ -395,18 +393,13 @@ function drawShopButton(rect, progress) {
   const t = now();
   const over = mouseOver(rect);
   const pulse = 0.5 + 0.5 * Math.sin(t * 3.5);
-  const base = lerpColor([60, 190, 110], [100, 230, 140], pulse);
-  const top = over ? lighten(base, 0.25) : base;
-  fillRect(rect.x - 20, rect.y - 20, rect.w + 40, rect.h + 40, [110, 240, 150], 26, (12 + 22 * pulse) / 255);
-  fillRect(rect.x, rect.y + 5, rect.w, rect.h, darken(base, 0.55), 16);
-  fillRect(rect.x, rect.y, rect.w, rect.h, darken(base, 0.15), 16);
-  fillRect(rect.x, rect.y, rect.w, rect.h - 10, top, 16);
-  fillRect(rect.x + 16, rect.y + 6, rect.w - 32, 5, lighten(top, 0.5), 3);
-  ringRect(rect.x, rect.y, rect.w, rect.h, lighten(base, 0.6), 2, 16);
+  const face = over ? lighten(ORANGE, 0.15) : lerpColor(ORANGE, lighten(ORANGE, 0.1), pulse);
+  fillRect(rect.x + 6, rect.y + 6, rect.w, rect.h, TITLE_SHADOW, 16);
+  fillRect(rect.x, rect.y, rect.w, rect.h, face, 16);
 
   drawCoinIcon(rect.x + 40, rect.y + 44, 20);
-  drawText(BIG_FONT, 'SHOP', [12, 50, 28], rect.x + 74, rect.y + 10, 'topleft', false);
-  drawText(TINY_FONT, 'SpyCatcher upgrades', [12, 50, 28], rect.x + 76, rect.y + 62, 'topleft', false);
+  drawText(BIG_FONT, 'SHOP', WHITE, rect.x + 74, rect.y + 10, 'topleft', false);
+  drawText(TINY_FONT, 'SpyCatcher upgrades', WHITE, rect.x + 76, rect.y + 62, 'topleft', false);
 
   const canBuy = UPGRADE_KEYS.some((key) => {
     const price = upgradePrice(progress[key]);
@@ -415,7 +408,7 @@ function drawShopButton(rect, progress) {
   if (canBuy) {
     const bx = rect.right - 10 - 29;
     const by = rect.y + 4 - 12;
-    fillRect(bx, by + 2, 58, 24, [200, 45, 60], 12);
+    fillRect(bx + 3, by + 3, 58, 24, TITLE_SHADOW, 12);
     fillRect(bx, by, 58, 24, RED, 12);
     drawText(TINY_FONT, 'READY', WHITE, bx + 29, by + 12, 'center', false);
   }
@@ -479,12 +472,10 @@ function menuLayout() {
 
 function drawMenu(menu, rects) {
   const t = now();
-  drawWaterBackground();
-  drawVignette();
+  drawMenuBackdrop();
 
   const titleY = 10 + Math.sin(t * 1.5) * 4;
-  drawText(TITLE_FONT, 'GV FLOAT', [140, 220, 245], WIDTH / 2 + 3, titleY + 3, 'midtop', false, 90);
-  drawText(TITLE_FONT, 'GV FLOAT', WHITE, WIDTH / 2, titleY, 'midtop');
+  drawTitle(TITLE_FONT, 'GV FLOAT', WIDTH / 2, titleY);
 
   drawCoinCounter(menu.coins, new Rect(15, 12, 170, 36));
 
@@ -502,25 +493,21 @@ function drawMenu(menu, rects) {
   const startRect = rects.start;
   const over = mouseOver(startRect);
   const pulse = 0.5 + 0.5 * Math.sin(t * 3);
-  const baseYellow = lerpColor(YELLOW, lighten(YELLOW, 0.2), pulse);
-  const topColor = over ? lighten(YELLOW, 0.35) : baseYellow;
-  fillRect(startRect.x, startRect.y + 5, startRect.w, startRect.h, darken(ORANGE, 0.35), 14);
-  fillRect(startRect.x, startRect.y, startRect.w, startRect.h, ORANGE, 14);
-  fillRect(startRect.x, startRect.y, startRect.w, startRect.h - 10, topColor, 14);
-  fillRect(startRect.x + 16, startRect.y + 6, startRect.w - 32, 5, lighten(topColor, 0.5), 3);
-  drawText(MEDIUM_FONT, 'START RUN', [60, 35, 5], startRect.centerx, startRect.centery - 3, 'center', false);
+  const face = over ? lighten(TITLE_COLOR, 0.15) : lerpColor(TITLE_COLOR, lighten(TITLE_COLOR, 0.08), pulse);
+  fillRect(startRect.x + 6, startRect.y + 6, startRect.w, startRect.h, TITLE_SHADOW, 14);
+  fillRect(startRect.x, startRect.y, startRect.w, startRect.h, face, 14);
+  drawText(MEDIUM_FONT, 'START RUN', WHITE, startRect.centerx, startRect.centery, 'center', false);
 
   drawMenuNotice(menu, WIDTH / 2, startRect.bottom + 4, 'or press ENTER');
 }
 
 function drawCharactersScreen(menu, rects) {
-  drawWaterBackground();
-  drawVignette();
-  drawText(BIG_FONT, 'CHOOSE YOUR CHARACTER', WHITE, WIDTH / 2, 24, 'midtop');
+  drawMenuBackdrop();
+  drawTitle(BIG_FONT, 'CHARACTERS', WIDTH / 2, 24);
   drawCoinCounter(menu.coins, new Rect(15, 12, 170, 36));
 
   const ownedCount = CHARACTERS.filter((c) => owns(c, menu.progress)).length;
-  drawText(SMALL_FONT, `${ownedCount}/${CHARACTERS.length} unlocked`, GRAY, WIDTH / 2, 84, 'midtop', false);
+  drawText(SMALL_FONT, `${ownedCount}/${CHARACTERS.length} unlocked`, PANEL, WIDTH / 2, 84, 'midtop', false);
 
   CHARACTERS.forEach((character, index) => {
     const rect = rects.characters[index];
@@ -532,32 +519,30 @@ function drawCharactersScreen(menu, rects) {
   });
 
   const perk = SKIN_PERKS[menu.character].label;
-  drawText(SMALL_FONT, `${menu.character}:  ${perk}`, YELLOW, WIDTH / 2, 348, 'midtop', false);
-  drawText(TINY_FONT, 'Click a locked skin twice to buy it', GRAY, WIDTH / 2, 376, 'midtop', false);
+  drawText(SMALL_FONT, `${menu.character}:  ${perk}`, TITLE_COLOR, WIDTH / 2, 348, 'midtop', false);
+  drawText(TINY_FONT, 'Click a locked skin twice to buy it', PANEL, WIDTH / 2, 376, 'midtop', false);
   drawMenuNotice(menu, WIDTH / 2, 410);
   drawBackButton(rects.back);
 }
 
 function drawShopScreen(menu, rects) {
-  drawWaterBackground();
-  drawVignette();
-  drawText(TITLE_FONT, 'SHOP', WHITE, WIDTH / 2, 10, 'midtop');
+  drawMenuBackdrop();
+  drawTitle(TITLE_FONT, 'SHOP', WIDTH / 2, 10);
   drawCoinCounter(menu.coins, new Rect(15, 12, 170, 36));
-  drawText(SMALL_FONT, 'SPYCATCHER UPGRADES', PANEL_BORDER, WIDTH / 2, 104, 'midtop', false);
+  drawText(SMALL_FONT, 'SPYCATCHER UPGRADES', PANEL, WIDTH / 2, 104, 'midtop', false);
   const upgradeLevels = UPGRADE_KEYS.reduce((sum, key) => sum + menu.progress[key], 0);
-  drawText(TINY_FONT, `${upgradeLevels}/${UPGRADE_KEYS.length * UPGRADE_MAX_LEVEL} levels`, GRAY, WIDTH / 2, 126, 'midtop', false);
+  drawText(TINY_FONT, `${upgradeLevels}/${UPGRADE_KEYS.length * UPGRADE_MAX_LEVEL} levels`, PANEL, WIDTH / 2, 126, 'midtop', false);
   for (const [kind, rect] of Object.entries(rects.upgrades)) {
     drawUpgradeButton(rect, kind, menu.progress[`${kind}_level`], menu.coins, menu.pending === `upgrade:${kind}`);
   }
-  drawText(TINY_FONT, 'Click an upgrade twice to buy it', GRAY, WIDTH / 2, 290, 'midtop', false);
+  drawText(TINY_FONT, 'Click an upgrade twice to buy it', PANEL, WIDTH / 2, 290, 'midtop', false);
   drawMenuNotice(menu, WIDTH / 2, 320);
   drawBackButton(rects.back);
 }
 
 function drawStatsPage(progress, backRect) {
-  drawWaterBackground();
-  drawVignette();
-  drawText(TITLE_FONT, 'STATISTICS', WHITE, WIDTH / 2, 24, 'midtop');
+  drawMenuBackdrop();
+  drawTitle(TITLE_FONT, 'STATISTICS', WIDTH / 2, 24);
 
   const stats = progress.stats;
   const runs = Object.entries(stats.skin_runs);

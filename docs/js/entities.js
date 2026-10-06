@@ -122,7 +122,7 @@ function getZeppelinBanner() {
     ctx.scale(scale, scale);
     fillRect(0, 0, width, height, PANEL_BORDER, 2);
     ringRect(0, 0, width, height, lighten(PANEL_BORDER, 0.5), 1, 2);
-    drawText(GAUGE_FONT, label, [10, 40, 58], width / 2, height / 2, 'center', false);
+    drawText(GAUGE_FONT, label, [16, 50, 52], width / 2, height / 2, 'center', false);
   });
   zeppelinBanner = { element, width, height, scale };
   return zeppelinBanner;
@@ -349,7 +349,7 @@ class Bacterium {
     for (const bubble of this.bubbles) drawBubble(Math.trunc(bubble.x), Math.trunc(bubble.y), bubble.radius);
 
     if (showGlow && this.character !== 'Purified GVs') {
-      glow(this.x, this.y, 42 * (1.0 + 0.04 * Math.sin(t * 3)), [170, 230, 255], 55, 1.6);
+      glow(this.x, this.y, 42 * (1.0 + 0.04 * Math.sin(t * 3)), [138, 212, 220], 55, 1.6);
     }
 
     ctx.save();
@@ -669,10 +669,10 @@ function drawBiobrick(cx, cy, color = BIOBRICK_COLOR) {
 /** An original ring-of-bricks design in the iGEM palette; not the iGEM logo itself. */
 function drawIgemLegacy(cx, cy, t) {
   const palette = [
-    [232, 181, 61], [235, 80, 80], [95, 215, 205],
-    [120, 240, 120], [150, 205, 235], [235, 225, 130],
+    [255, 188, 142], [229, 91, 0], [59, 124, 122],
+    [243, 125, 70], [138, 212, 220], [211, 252, 255],
   ];
-  ringCircle(cx, cy, 21, darken([232, 181, 61], 0.55), 2);
+  ringCircle(cx, cy, 21, darken([255, 188, 142], 0.55), 2);
   palette.forEach((color, index) => {
     const angle = t * 0.6 + (index / palette.length) * TAU;
     const px = cx + Math.cos(angle) * 15;
@@ -681,8 +681,8 @@ function drawIgemLegacy(cx, cy, t) {
     fillRect(px - 4, py - 3, 8, 6, color, 1);
   });
   const corePulse = 0.5 + 0.5 * Math.sin(t * 3);
-  fillCircle(cx, cy, 6, lerpColor([232, 181, 61], WHITE, corePulse * 0.4));
-  ringCircle(cx, cy, 6, darken([232, 181, 61], 0.4), 1);
+  fillCircle(cx, cy, 6, lerpColor([255, 188, 142], WHITE, corePulse * 0.4));
+  ringCircle(cx, cy, 6, darken([255, 188, 142], 0.4), 1);
 }
 
 function drawPurified(cx, cy, t, visibleGvs) {
@@ -695,14 +695,14 @@ function drawPurified(cx, cy, t, visibleGvs) {
       ringEllipse(rx, ry, 7, 13, GV_OUTLINE, 1);
       drawLine(rx + 2, ry + 3, rx + 2, ry + 6, WHITE, 1);
     } else {
-      ringEllipse(rx, ry, 7, 13, [110, 165, 185, 170], 1);
+      ringEllipse(rx, ry, 7, 13, [59, 124, 122, 170], 1);
     }
   });
 }
 
 // ---------------------------------------------------------------- obstacles
 
-/** A stone pillar texture, cached on its own canvas. */
+/** A protein pillar texture, cached on its own canvas. */
 function makeStonePillar(width, height, capAtBottom, seed, base) {
   const element = makeCanvas(width, height);
   renderOnto(element, () => {
@@ -727,26 +727,20 @@ function makeStonePillar(width, height, capAtBottom, seed, base) {
     ctx.closePath();
     ctx.clip();
 
-    const columnColor = (x) => {
-      const shade = clamp(1.0 - Math.abs(x / (width - 1) - 0.35) * 1.6, 0.0, 1.0);
-      return lerpColor(darken(base, 0.6), lighten(base, 0.18), shade);
-    };
-    for (let x = 0; x < width; x++) fillRect(x, 0, 1, height, columnColor(x));
-
+    // Space-filling protein surface, like the VOYAGE illustrations: flat
+    // overlapping atoms, each with a darker rim.
+    fillRect(0, 0, width, height, darken(base, 0.3));
     const rng = seededRandom(seed);
-    for (let spot = 0; spot < Math.max(2, Math.floor(height / 16)); spot++) {
-      const spotX = rng.randint(6, width - 7);
-      const spotY = rng.randint(0, height - 1);
-      const column = columnColor(spotX);
-      const color = rng.random() < 0.7 ? darken(column, 0.28) : lerpColor(column, [120, 190, 110], 0.35);
-      fillCircle(spotX, spotY, rng.randint(2, 6), color);
+    const atoms = Math.max(4, Math.floor((width * height) / 70));
+    for (let atom = 0; atom < atoms; atom++) {
+      const r = rng.uniform(6, 10);
+      const ax = rng.uniform(-2, width + 2);
+      const ay = rng.uniform(-2, height + 2);
+      fillCircle(ax, ay, r, darken(base, 0.2));
+      fillCircle(ax - r * 0.15, ay - r * 0.15, r * 0.8, rng.random() < 0.8 ? base : lighten(base, 0.15));
     }
-
-    const capHeight = Math.min(16, height);
-    const capY = capAtBottom ? height - capHeight : 0;
-    for (let x = 0; x < width; x++) fillRect(x, capY, 1, capHeight, lerpColor(columnColor(x), [150, 205, 150], 0.35));
-    const edgeY = capAtBottom ? capY - 1 : capY + capHeight;
-    fillRect(0, edgeY - 1, width, 2, darken(base, 0.55));
+    // A firm edge on the side facing the gap, so the collision line stays readable.
+    fillRect(0, capAtBottom ? height - 3 : 0, width, 3, darken(base, 0.45));
   });
   return element;
 }
@@ -948,7 +942,7 @@ class SpecialPrize extends Bonus {
     super(x, y);
     this.radius = 13;
     this.label = 'iGEM Prize';
-    this.labelColor = [232, 181, 61];
+    this.labelColor = [255, 188, 142];
   }
 
   update(speed, frameScale) {
@@ -962,7 +956,7 @@ class SpecialPrize extends Bonus {
     const cx = Math.trunc(this.x);
     const cy = Math.trunc(this.drawY);
     const pulse = 0.5 + 0.5 * Math.sin(t * 4 + this.phase);
-    const gold = [232, 181, 61];
+    const gold = [255, 188, 142];
     glow(cx, cy, this.radius * 3, [255, 225, 140], 90 + 60 * pulse);
 
     for (const side of [-1, 1]) {
@@ -1008,12 +1002,12 @@ class DriftingCell {
       this.radius = 20;
       this.extraSpeed = 1.1;
       this.amplitude = rand(10, 26);
-      this.color = [212, 118, 162];
+      this.color = [243, 125, 70];
     } else {
       this.radius = 14;
       this.extraSpeed = 2.2;
       this.amplitude = rand(24, 46);
-      this.color = [150, 205, 185];
+      this.color = [229, 91, 0];
     }
     this.wobbleSpeed = rand(1.1, 1.9);
     this.killed = false;
@@ -1572,7 +1566,7 @@ function drawBossBody(boss, t) {
     const progress = 1 - clamp(boss.timer / BOSS_DEFEATED_SECONDS, 0.0, 1.0);
     cx = Math.trunc(x + Math.sin(t * 45) * 7 * (1 - progress));
   }
-  glow(cx, cy, Math.trunc(BOSS_RADIUS * 1.5), [170, 130, 255], 55);
+  glow(cx, cy, Math.trunc(BOSS_RADIUS * 1.5), [255, 188, 142], 55);
 
   let color = BOSS_COLOR;
   if (boss.hurtFlash > 0) color = lerpColor(BOSS_COLOR, WHITE, boss.hurtFlash / 0.35);
@@ -1706,7 +1700,7 @@ function drawBoss(boss) {
   for (let index = 0; index < boss.hitsNeeded; index++) {
     const remaining = index >= boss.hits;
     const px = Math.trunc(startX + index * pipGap);
-    fillCircle(px, 164, 6, remaining ? BOSS_COLOR : [40, 24, 34]);
+    fillCircle(px, 164, 6, remaining ? BOSS_COLOR : darken(BOSS_COLOR, 0.75));
     ringCircle(px, 164, 6, WHITE, 1);
   }
 }

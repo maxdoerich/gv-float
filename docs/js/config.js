@@ -161,10 +161,10 @@ const HITBOXES = {
 //   hazards:    multiplier on how often macrophages and ciliates swim in
 //   powerups:   multiplier on how often SpyCatchers and GvpC show up
 const DIFFICULTIES = [
-  { name: 'Relaxed', levels: false, transducer: 0.5, hazards: 0.5, powerups: 2.0, color: [120, 240, 120] },
-  { name: 'Easy', levels: true, transducer: 0.75, hazards: 0.75, powerups: 1.5, color: [150, 225, 255] },
-  { name: 'Normal', levels: true, transducer: 1.0, hazards: 1.0, powerups: 1.0, color: [250, 210, 65] },
-  { name: 'Hard', levels: true, transducer: 1.25, hazards: 1.4, powerups: 0.7, color: [235, 80, 80] },
+  { name: 'Relaxed', levels: false, transducer: 0.5, hazards: 0.5, powerups: 2.0, color: [211, 252, 255] },
+  { name: 'Easy', levels: true, transducer: 0.75, hazards: 0.75, powerups: 1.5, color: [138, 212, 220] },
+  { name: 'Normal', levels: true, transducer: 1.0, hazards: 1.0, powerups: 1.0, color: [255, 188, 142] },
+  { name: 'Hard', levels: true, transducer: 1.25, hazards: 1.4, powerups: 0.7, color: [243, 125, 70] },
 ];
 const DEFAULT_DIFFICULTY = 'Normal';
 const KILL_COINS = 5;
@@ -239,10 +239,10 @@ const BIOBRICK_TIER_COLORS = {
 
 // The water changes as you get deeper into a run.
 const BIOMES = [
-  { name: 'Sunlit shallows', score: 0, top: [38, 132, 170], bottom: [6, 28, 52], pillar: [58, 128, 100] },
-  { name: 'Kelp forest', score: 15, top: [32, 122, 112], bottom: [4, 30, 34], pillar: [104, 126, 52] },
-  { name: 'Midnight zone', score: 35, top: [18, 58, 100], bottom: [2, 10, 26], pillar: [62, 88, 112] },
-  { name: 'Hydrothermal vents', score: 60, top: [58, 42, 62], bottom: [20, 6, 12], pillar: [116, 74, 66] },
+  { name: 'Sunlit shallows', score: 0, top: [168, 230, 236], bottom: [30, 78, 80], pillar: [59, 124, 122] },
+  { name: 'Kelp forest', score: 15, top: [138, 212, 200], bottom: [20, 62, 56], pillar: [74, 140, 110] },
+  { name: 'Midnight zone', score: 35, top: [92, 164, 172], bottom: [8, 30, 36], pillar: [42, 96, 112] },
+  { name: 'Hydrothermal vents', score: 60, top: [245, 196, 165], bottom: [44, 26, 22], pillar: [213, 100, 40] },
 ];
 const BIOME_FADE_SECONDS = 2.0;
 
@@ -353,24 +353,27 @@ const BOSS_TENTACLE_LENGTH = 1100;
 const BOSS_TENTACLE_HIT_WIDTH = 14;
 const BOSS_REWARD_COINS = 40;
 const BOSS_REWARD_PER_STAGE = 10;
-const BOSS_COLOR = [150, 112, 215];
-const BOSS_WEAK_COLOR = [255, 205, 90];
+const BOSS_COLOR = [213, 100, 40];
+const BOSS_WEAK_COLOR = [211, 252, 255];
 
 // Where the browser keeps coins, skins and upgrades.
 const PROGRESS_KEY = 'gv_float_progress';
 
 // ------------------------------------------------------------------- colours
+// iGEM Heidelberg 2026 (VOYAGE) palette: Cayenne Red E55B00, Atomic Tangerine F37D46,
+// Peach Glow FFBC8E, Frosted Blue 8AD4DC, Pine Blue 3B7C7A, Light Cyan D3FCFF.
 
-const WATER_TOP = [38, 132, 170];
-const WATER_BOTTOM = [6, 28, 52];
-const PANEL = [8, 32, 52];
-const PANEL_BORDER = [117, 201, 225];
+
+const WATER_TOP = [168, 230, 236];
+const WATER_BOTTOM = [30, 78, 80];
+const PANEL = [30, 76, 78];
+const PANEL_BORDER = [138, 212, 220];
 const BACTERIUM_COLOR = [240, 200, 80];
-const BACTERIUM_OUTLINE = [60, 50, 30];
-const GV_COLOR = [235, 245, 250];
-const GV_OUTLINE = [150, 185, 200];
-const OBSTACLE_COLOR = [58, 128, 100];
-const SAND_COLOR = [150, 132, 92];
+const BACTERIUM_OUTLINE = [16, 50, 52];
+const GV_COLOR = [211, 252, 255];
+const GV_OUTLINE = [138, 212, 220];
+const OBSTACLE_COLOR = [59, 124, 122];
+const SAND_COLOR = [240, 170, 125];
 const TRANSDUCER_COLOR = [47, 185, 225];
 const TRANSDUCER_CORE = [190, 244, 255];
 const TRANSDUCER_PUSH_COLOR = [160, 105, 230];
@@ -382,25 +385,28 @@ const GFP_COLOR = [120, 240, 120];
 const ANTIBODY_COLOR = [235, 225, 130];
 const GRANZYME_COLOR = [255, 115, 95];
 const AMPICILLIN_COLOR = [140, 195, 250];
-const COIN_COLOR = [250, 200, 70];
-const COIN_EDGE = [185, 130, 30];
-const ECOLI_COLOR = [105, 205, 100];
-const HEK_COLOR = [235, 135, 185];
-const HEK_NUCLEUS = [130, 70, 145];
-const ANABAENA_COLOR = [95, 195, 165];
-const YEAST_COLOR = [235, 200, 130];
-const YEAST_VACUOLE = [170, 130, 75];
-const SALMONELLA_COLOR = [130, 150, 235];
-const SERRATIA_COLOR = [205, 45, 75];
-const HALO_COLOR = [225, 85, 120];
+const COIN_COLOR = [255, 188, 142];
+const COIN_EDGE = [229, 91, 0];
+const ECOLI_COLOR = [243, 125, 70];
+const HEK_COLOR = [255, 188, 142];
+const HEK_NUCLEUS = [59, 124, 122];
+const ANABAENA_COLOR = [138, 212, 220];
+const YEAST_COLOR = [255, 188, 142];
+const YEAST_VACUOLE = [59, 124, 122];
+const SALMONELLA_COLOR = [90, 160, 158];
+const SERRATIA_COLOR = [229, 91, 0];
+const HALO_COLOR = [213, 100, 40];
 const BIOBRICK_COLOR = [245, 135, 55];
 const WHITE = [255, 255, 255];
-const GRAY = [160, 180, 190];
-const RED = [235, 80, 80];
-const YELLOW = [250, 210, 65];
-const GREEN = [80, 220, 120];
-const ORANGE = [245, 155, 55];
+const GRAY = [170, 205, 205];
+const RED = [229, 91, 0];
+const YELLOW = [255, 188, 142];
+const GREEN = [138, 212, 220];
+const ORANGE = [243, 125, 70];
 const BLACK = [20, 20, 20];
+const TITLE_COLOR = [229, 91, 0];
+const TITLE_SHADOW = [245, 191, 149];
+const LIGHT_CYAN = [211, 252, 255];
 
 function lerpColor(a, b, t) {
   return [
